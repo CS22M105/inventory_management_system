@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Nursing Inventory System{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <header>
+        <h1>Nursing Inventory System</h1>
+
+        {% block navigation %}
+        <nav>
+            <a href="{{ url_for('dashboard') }}">Home</a>
+            <a href="/items">Items</a>
+            <a href="/scan">Scan</a>
+            <a href="/transactions">Transactions</a>
+            {% if session.get("user_id") %}
+            <a href="{{ url_for('logout') }}">Logout</a>
+            {% endif %}
+        </nav>
+        {% endblock %}
+    </header>
+
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer>
+        <p>Local prototype for nursing inventory tracking.</p>
+    </footer>
+</body>
+</html>

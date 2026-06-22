@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block title %}Manage Users | Nursing Inventory System{% endblock %}
+
+{% block content %}
+<section>
+    <div class="page-header">
+        <div>
+            <h2>Manage Users</h2>
+            <p>View registered users who can access the inventory system.</p>
+        </div>
+
+        <a class="button-link" href="{{ url_for('admin_user_new') }}">Add User</a>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Institution ID</th>
+                <th>Name</th>
+                <th>Role</th>
+                <th>Department</th>
+                <th>Status</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for user in users %}
+            <tr>
+                <td>{{ user["institution_id"] }}</td>
+                <td>{{ user["name"] }}</td>
+                <td>{{ user["role"] }}</td>
+                <td>{{ user["department"] or "Not set" }}</td>
+                <td>
+                    {% if user["is_active"] %}
+                    Active
+                    {% else %}
+                    Inactive
+                    {% endif %}
+                </td>
+                <td>
+                    {% if user["id"] == session.get("user_id") %}
+                    Current admin
+                    {% elif user["is_active"] %}
+                    <form class="inline-form" method="post" action="{{ url_for('admin_user_deactivate', user_id=user['id']) }}">
+                        <button class="danger-button" type="submit">Deactivate</button>
+                    </form>
+                    {% else %}
+                    <div class="action-group">
+                        <form class="inline-form" method="post" action="{{ url_for('admin_user_activate', user_id=user['id']) }}">
+                            <button type="submit">Reactivate</button>
+                        </form>
+
+                        {% if user["transaction_count"] == 0 %}
+                        <form class="inline-form" method="post" action="{{ url_for('admin_user_delete', user_id=user['id']) }}">
+                            <button class="danger-button" type="submit">Delete</button>
+                        </form>
+                        {% else %}
+                        Has history
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+{% endblock %}

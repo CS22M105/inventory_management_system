@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}Login | Nursing Inventory System{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/login.css') }}">
+{% endblock %}
+
+{% block navigation %}{% endblock %}
+
+{% block content %}
+<section class="login-card">
+    <h2>Login</h2>
+    <p>Enter your student, faculty, or staff ID to access the inventory system.</p>
+
+    <form method="post" action="/login">
+        <label for="login_mode">Login Type</label>
+        <select id="login_mode" name="login_mode" required>
+            <option value="user">User</option>
+            <option value="admin">Administrator</option>
+        </select>
+
+        <label for="institution_id">Institution ID</label>
+        <input
+            type="text"
+            id="institution_id"
+            name="institution_id"
+            placeholder="Example: S1001"
+            required
+        >
+
+        <button type="submit">Log In</button>
+    </form>
+</section>
+
+{% if error %}
+<div class="modal-backdrop" id="login-error-modal">
+    <div class="modal" role="alertdialog" aria-labelledby="login-error-title" aria-describedby="login-error-message">
+        <h2 id="login-error-title">Login Not Allowed</h2>
+        <p id="login-error-message">{{ error }}</p>
+        <button type="button" onclick="document.getElementById('login-error-modal').hidden = true;">
+            Close
+        </button>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

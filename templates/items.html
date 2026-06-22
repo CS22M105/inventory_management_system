@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}Items | Nursing Inventory System{% endblock %}
+
+{% block content %}
+<section>
+    <div class="page-header">
+        <div>
+            <h2>Inventory Items</h2>
+            <p>View registered inventory items and their current quantities.</p>
+        </div>
+
+        {% if session.get("user_role") in ["faculty", "administrator"] %}
+        <a class="button-link" href="{{ url_for('item_new') }}">Add Item</a>
+        {% endif %}
+    </div>
+
+    {% if items %}
+    <table>
+        <thead>
+            <tr>
+                <th>Barcode</th>
+                <th>Name</th>
+                <th>Room</th>
+                <th>Bin</th>
+                <th>Company</th>
+                <th>Quantity</th>
+                <th>Minimum</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in items %}
+            <tr>
+                <td>{{ item["barcode"] }}</td>
+                <td>{{ item["name"] }}</td>
+                <td>{{ item["room"] }}</td>
+                <td>{{ item["bin_location"] }}</td>
+                <td>{{ item["company"] or "Not set" }}</td>
+                <td>{{ item["quantity"] }}</td>
+                <td>{{ item["minimum_quantity"] }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>No inventory items have been added yet.</p>
+    {% endif %}
+</section>
+{% endblock %}

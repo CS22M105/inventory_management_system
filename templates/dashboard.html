@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard | Nursing Inventory System{% endblock %}
+
+{% block content %}
+<section>
+    <h2>Dashboard</h2>
+    <p>Overview of the nursing inventory system.</p>
+
+    <div class="dashboard-grid">
+        <article>
+            <h3>Total Items</h3>
+            <p>{{ total_items }}</p>
+        </article>
+
+        <article>
+            <h3>Low-Stock Items</h3>
+            <p>{{ low_stock_items }}</p>
+        </article>
+
+        <article>
+            <h3>Total Transactions</h3>
+            <p>{{ total_transactions }}</p>
+        </article>
+    </div>
+
+    <h3>Recent Activity</h3>
+    <p>Recent inventory actions will appear here after transactions are added.</p>
+</section>
+{% endblock %}

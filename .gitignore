@@ -1,0 +1,9 @@
+invent/
+data/
+__pycache__/
+*.pyc
+.DS_Store
+*.db
+*.sqlite
+*.sqlite3
+Nursing_Inventory_System.mp4

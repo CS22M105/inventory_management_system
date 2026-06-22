@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block title %}Add User | Nursing Inventory System{% endblock %}
+
+{% block content %}
+<section>
+    <h2>Add User</h2>
+    <p>Create a registered user who can log in to the inventory system.</p>
+
+    <form method="post" action="{{ url_for('admin_user_new') }}">
+        <label for="institution_id">Institution ID</label>
+        <input
+            type="text"
+            id="institution_id"
+            name="institution_id"
+            placeholder="Example: S2001"
+            required
+        >
+
+        <label for="name">Full Name</label>
+        <input
+            type="text"
+            id="name"
+            name="name"
+            placeholder="Example: Jane Doe"
+            required
+        >
+
+        <label for="role">Role</label>
+        <select id="role" name="role" required>
+            <option value="">Select a role</option>
+            <option value="student">Student</option>
+            <option value="faculty">Faculty or Staff</option>
+            <option value="administrator">Administrator</option>
+        </select>
+
+        <label for="department">Department</label>
+        <input
+            type="text"
+            id="department"
+            name="department"
+            placeholder="Example: Nursing"
+        >
+
+        <button type="submit">Create User</button>
+    </form>
+</section>
+{% endblock %}

@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+
+{% block title %}Add Item | Nursing Inventory System{% endblock %}
+
+{% block content %}
+<section>
+    <h2>Add Item</h2>
+    <p>Register a new inventory item so it can be tracked by barcode.</p>
+
+    {% if error %}
+    <p class="error-message">{{ error }}</p>
+    {% endif %}
+
+    <form method="post" action="{{ url_for('item_new') }}">
+        <label for="barcode">Barcode</label>
+        <input
+            type="text"
+            id="barcode"
+            name="barcode"
+            placeholder="Example: GLOVE-M-001"
+            required
+        >
+
+        <label for="name">Item Name</label>
+        <input
+            type="text"
+            id="name"
+            name="name"
+            placeholder="Example: Medium Nitrile Gloves"
+            required
+        >
+
+        <label for="room">Room</label>
+        <input
+            type="text"
+            id="room"
+            name="room"
+            placeholder="Example: Medication Room"
+            required
+        >
+
+        <label for="bin_location">Bin Location</label>
+        <input
+            type="text"
+            id="bin_location"
+            name="bin_location"
+            placeholder="Example: Shelf A, Bin 3"
+            required
+        >
+
+        <label for="company">Company</label>
+        <input
+            type="text"
+            id="company"
+            name="company"
+            placeholder="Example: Medline"
+        >
+
+        <label for="quantity">Current Quantity</label>
+        <input
+            type="number"
+            id="quantity"
+            name="quantity"
+            min="0"
+            value="0"
+            required
+        >
+
+        <label for="minimum_quantity">Minimum Quantity</label>
+        <input
+            type="number"
+            id="minimum_quantity"
+            name="minimum_quantity"
+            min="0"
+            value="0"
+            required
+        >
+
+        <label for="location">General Location</label>
+        <input
+            type="text"
+            id="location"
+            name="location"
+            placeholder="Example: Nursing Simulation Lab"
+        >
+
+        <label for="expiration_date">Expiration Date</label>
+        <input
+            type="date"
+            id="expiration_date"
+            name="expiration_date"
+        >
+
+        <label for="notes">Notes</label>
+        <textarea
+            id="notes"
+            name="notes"
+            rows="4"
+            placeholder="Optional notes about this item"
+        ></textarea>
+
+        <button type="submit">Create Item</button>
+    </form>
+</section>
+{% endblock %}

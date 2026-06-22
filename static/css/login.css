@@ -1,0 +1,40 @@
+.login-card {
+    margin: 0 auto;
+    max-width: 520px;
+}
+
+.login-card form {
+    max-width: none;
+}
+
+.modal-backdrop {
+    align-items: center;
+    background: rgba(15, 23, 42, 0.52);
+    display: flex;
+    inset: 0;
+    justify-content: center;
+    padding: 24px;
+    position: fixed;
+    z-index: 1000;
+}
+
+.modal-backdrop[hidden] {
+    display: none;
+}
+
+.modal {
+    background: white;
+    border-radius: 8px;
+    max-width: 420px;
+    padding: 28px;
+    width: 100%;
+}
+
+.modal h2 {
+    color: #991b1b;
+    margin-top: 0;
+}
+
+.modal p {
+    line-height: 1.5;
+}
