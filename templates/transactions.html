@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block title %}Transactions | Nursing Inventory System{% endblock %}
+
+{% block content %}
+<section>
+    <div class="page-header">
+        <div>
+            <h2>Transaction History</h2>
+            <p>Review inventory actions created when users add or remove stock.</p>
+        </div>
+    </div>
+
+    {% if transactions %}
+    <table>
+        <thead>
+            <tr>
+                <th>Date and Time</th>
+                <th>Action</th>
+                <th>Item</th>
+                <th>Barcode</th>
+                <th>Quantity</th>
+                <th>User</th>
+                <th>Notes</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for transaction in transactions %}
+            <tr>
+                <td>{{ transaction["created_at"] }}</td>
+                <td>{{ transaction["transaction_type"] }}</td>
+                <td>{{ transaction["item_name"] }}</td>
+                <td>{{ transaction["barcode"] }}</td>
+                <td>{{ transaction["quantity"] }}</td>
+                <td>{{ transaction["user_name"] }}</td>
+                <td>{{ transaction["notes"] or "No notes" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>No transactions have been recorded yet.</p>
+    {% endif %}
+</section>
+{% endblock %}
