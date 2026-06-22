@@ -328,17 +328,27 @@ def admin_user_new():
         department = request.form.get("department", "").strip()
 
         if not institution_id or not name or role not in {"student", "faculty", "administrator"}:
-            return render_template("user_new.html"), 400
+            return render_template(
+                "user_new.html",
+                error="Institution ID, name, and a valid role are required.",
+            ), 400
 
         db = get_db()
-        db.execute(
-            """
-            INSERT INTO users (institution_id, name, role, department)
-            VALUES (?, ?, ?, ?)
-            """,
-            (institution_id, name, role, department),
-        )
-        db.commit()
+
+        try:
+            db.execute(
+                """
+                INSERT INTO users (institution_id, name, role, department)
+                VALUES (?, ?, ?, ?)
+                """,
+                (institution_id, name, role, department),
+            )
+            db.commit()
+        except sqlite3.IntegrityError:
+            return render_template(
+                "user_new.html",
+                error="A user with this Institution ID already exists.",
+            ), 400
 
         return redirect(url_for("admin_users"))
 
