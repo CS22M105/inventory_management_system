@@ -1,4 +1,6 @@
-from flask import Flask, g, redirect, render_template, request, session, url_for
+from flask import Flask, Response, g, redirect, render_template, request, session, url_for
+import csv
+import io
 import sqlite3
 import click
 from pathlib import Path
@@ -337,6 +339,71 @@ def transactions():
 
     return render_template("transactions.html", transactions=transaction_rows)
 
+@app.route("/reports/export")
+def export_inventory():
+    admin_redirect = require_admin()
+
+    if admin_redirect is not None:
+        return admin_redirect
+
+    db = get_db()
+    inventory_items = db.execute(
+        """
+        SELECT
+            barcode,
+            name,
+            bin_location,
+            room,
+            company,
+            quantity,
+            minimum_quantity,
+            location,
+            expiration_date,
+            notes
+        FROM items
+        ORDER BY name
+        """
+    ).fetchall()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(
+        [
+            "Barcode",
+            "Item Name",
+            "Bin Location",
+            "Room",
+            "Company",
+            "Quantity",
+            "Minimum Quantity",
+            "General Location",
+            "Expiration Date",
+            "Notes",
+        ]
+    )
+
+    for item in inventory_items:
+        writer.writerow(
+            [
+                item["barcode"],
+                item["name"],
+                item["bin_location"],
+                item["room"],
+                item["company"],
+                item["quantity"],
+                item["minimum_quantity"],
+                item["location"],
+                item["expiration_date"],
+                item["notes"],
+            ]
+        )
+
+    return Response(
+        output.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment; filename=inventory_export.csv"},
+    )
+
 @app.route("/admin/users")
 def admin_users():
     admin_redirect = require_admin()
@@ -507,10 +574,10 @@ def db_status():
     item_count = db.execute("SELECT COUNT(*) FROM items").fetchone()[0]
     transaction_count = db.execute("SELECT COUNT(*) FROM transactions").fetchone()[0]
 
-    return f"""
-    <h1>Database Status</h1>
-    <p>Users table rows: {user_count}</p>
-    <p>Items table rows: {item_count}</p>
-    <p>Transactions table rows: {transaction_count}</p>
-    """
+    return render_template(
+        "db_status.html",
+        user_count=user_count,
+        item_count=item_count,
+        transaction_count=transaction_count,
+    )
 # to run : invent/bin/python -m flask --app app init-db
