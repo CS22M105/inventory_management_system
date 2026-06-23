@@ -106,9 +106,6 @@ def login():
         session["user_role"] = user["role"]
         session["login_mode"] = login_mode
 
-        if login_mode == "admin":
-            return redirect(url_for("admin_users"))
-
         return redirect(url_for("dashboard"))
 
     return render_template("login.html")
@@ -284,6 +281,34 @@ def scan():
         )
 
     return render_template("scan.html")
+
+@app.route("/transactions")
+def transactions():
+    login_redirect = require_login()
+
+    if login_redirect is not None:
+        return login_redirect
+
+    db = get_db()
+    transaction_rows = db.execute(
+        """
+        SELECT
+            transactions.id,
+            transactions.transaction_type,
+            transactions.quantity,
+            transactions.created_at,
+            transactions.notes,
+            items.name AS item_name,
+            items.barcode,
+            users.name AS user_name
+        FROM transactions
+        JOIN items ON items.id = transactions.item_id
+        JOIN users ON users.id = transactions.user_id
+        ORDER BY transactions.created_at DESC
+        """
+    ).fetchall()
+
+    return render_template("transactions.html", transactions=transaction_rows)
 
 @app.route("/admin/users")
 def admin_users():
