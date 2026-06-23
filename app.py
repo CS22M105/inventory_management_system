@@ -1,13 +1,15 @@
 from flask import Flask, Response, g, redirect, render_template, request, session, url_for
 import csv
 import io
-import sqlite3
+import os
+import psycopg
+from psycopg.rows import dict_row
 import click
 from pathlib import Path
 
 # holds the parent path to the current script we are running.
 BASE_DIR = Path(__file__).resolve().parent
-DATABASE = BASE_DIR / "data" / "inventory.db"
+DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://localhost/inventory_management_system")
 SCHEMA = BASE_DIR / "schema.sql"
 
 app = Flask(__name__)
@@ -18,8 +20,7 @@ def get_db():
     if "db" not in g: # g is for Global, it is a 
         # special object that Flask provides to store data during the 
         # request lifecycle.
-        g.db = sqlite3.connect(DATABASE)
-        g.db.row_factory = sqlite3.Row 
+        g.db = psycopg.connect(DATABASE_URL, row_factory=dict_row)
         # This allows us to access columns by name.
     return g.db
 
@@ -61,14 +62,14 @@ def close_db(error=None):
 @app.cli.command("init-db")
 def init_db_command():
     """Initialize the database."""
-    DATABASE.parent.mkdir(exist_ok=True) # Create the data directory if it doesn't exist.
-
     db = get_db()
 
     with SCHEMA.open("r") as schema_file:
-        db.executescript(schema_file.read())
+        db.execute(schema_file.read())
+
+    db.commit()
     
-    click.echo("Initialized the inventory database.")
+    click.echo("Initialized the PostgreSQL inventory database.")
 
 @app.route("/")
 def home():
@@ -84,7 +85,7 @@ def login():
             """
             SELECT id, institution_id, name, role
             FROM users
-            WHERE institution_id = ? AND is_active = 1
+            WHERE institution_id = %s AND is_active = TRUE
             """,
             (institution_id,),
         ).fetchone()
@@ -125,15 +126,15 @@ def dashboard():
         return login_redirect
 
     db = get_db()
-    total_items = db.execute("SELECT COUNT(*) FROM items").fetchone()[0]
+    total_items = db.execute("SELECT COUNT(*) AS total FROM items").fetchone()["total"]
     low_stock_items = db.execute(
         """
-        SELECT COUNT(*)
+        SELECT COUNT(*) AS total
         FROM items
         WHERE quantity <= minimum_quantity
         """
-    ).fetchone()[0]
-    total_transactions = db.execute("SELECT COUNT(*) FROM transactions").fetchone()[0]
+    ).fetchone()["total"]
+    total_transactions = db.execute("SELECT COUNT(*) AS total FROM transactions").fetchone()["total"]
     recent_transactions = db.execute(
         """
         SELECT
@@ -214,7 +215,7 @@ def item_new():
                     barcode, name, bin_location, room, company,
                     quantity, minimum_quantity, location, expiration_date, notes
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     barcode,
@@ -230,7 +231,8 @@ def item_new():
                 ),
             )
             db.commit()
-        except sqlite3.IntegrityError:
+        except psycopg.IntegrityError:
+            db.rollback()
             return render_template("item_new.html", error="An item with this barcode already exists."), 400
 
         return redirect(url_for("items"))
@@ -268,7 +270,7 @@ def scan():
             """
             SELECT id, name, quantity
             FROM items
-            WHERE barcode = ?
+            WHERE barcode = %s
             """,
             (barcode,),
         ).fetchone()
@@ -290,15 +292,15 @@ def scan():
         db.execute(
             """
             UPDATE items
-            SET quantity = ?
-            WHERE id = ?
+            SET quantity = %s
+            WHERE id = %s
             """,
             (new_quantity, item["id"]),
         )
         db.execute(
             """
             INSERT INTO transactions (user_id, item_id, transaction_type, quantity, notes)
-            VALUES (?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s)
             """,
             (session["user_id"], item["id"], transaction_type, quantity, notes),
         )
@@ -458,12 +460,13 @@ def admin_user_new():
             db.execute(
                 """
                 INSERT INTO users (institution_id, name, role, department)
-                VALUES (?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s)
                 """,
                 (institution_id, name, role, department),
             )
             db.commit()
-        except sqlite3.IntegrityError:
+        except psycopg.IntegrityError:
+            db.rollback()
             return render_template(
                 "user_new.html",
                 error="A user with this Institution ID already exists.",
@@ -487,8 +490,8 @@ def admin_user_deactivate(user_id):
     db.execute(
         """
         UPDATE users
-        SET is_active = 0
-        WHERE id = ?
+        SET is_active = FALSE
+        WHERE id = %s
         """,
         (user_id,),
     )
@@ -507,8 +510,8 @@ def admin_user_activate(user_id):
     db.execute(
         """
         UPDATE users
-        SET is_active = 1
-        WHERE id = ?
+        SET is_active = TRUE
+        WHERE id = %s
         """,
         (user_id,),
     )
@@ -531,7 +534,7 @@ def admin_user_delete(user_id):
         """
         SELECT id, is_active
         FROM users
-        WHERE id = ?
+        WHERE id = %s
         """,
         (user_id,),
     ).fetchone()
@@ -541,12 +544,12 @@ def admin_user_delete(user_id):
 
     transaction_count = db.execute(
         """
-        SELECT COUNT(*)
+        SELECT COUNT(*) AS total
         FROM transactions
-        WHERE user_id = ?
+        WHERE user_id = %s
         """,
         (user_id,),
-    ).fetchone()[0]
+    ).fetchone()["total"]
 
     if transaction_count > 0:
         return redirect(url_for("admin_users"))
@@ -554,7 +557,7 @@ def admin_user_delete(user_id):
     db.execute(
         """
         DELETE FROM users
-        WHERE id = ?
+        WHERE id = %s
         """,
         (user_id,),
     )
@@ -570,9 +573,9 @@ def db_status():
         return admin_redirect
 
     db = get_db()
-    user_count = db.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-    item_count = db.execute("SELECT COUNT(*) FROM items").fetchone()[0]
-    transaction_count = db.execute("SELECT COUNT(*) FROM transactions").fetchone()[0]
+    user_count = db.execute("SELECT COUNT(*) AS total FROM users").fetchone()["total"]
+    item_count = db.execute("SELECT COUNT(*) AS total FROM items").fetchone()["total"]
+    transaction_count = db.execute("SELECT COUNT(*) AS total FROM transactions").fetchone()["total"]
 
     return render_template(
         "db_status.html",
