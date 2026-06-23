@@ -122,11 +122,38 @@ def dashboard():
     if login_redirect is not None:
         return login_redirect
 
+    db = get_db()
+    total_items = db.execute("SELECT COUNT(*) FROM items").fetchone()[0]
+    low_stock_items = db.execute(
+        """
+        SELECT COUNT(*)
+        FROM items
+        WHERE quantity <= minimum_quantity
+        """
+    ).fetchone()[0]
+    total_transactions = db.execute("SELECT COUNT(*) FROM transactions").fetchone()[0]
+    recent_transactions = db.execute(
+        """
+        SELECT
+            transactions.transaction_type,
+            transactions.quantity,
+            transactions.created_at,
+            items.name AS item_name,
+            users.name AS user_name
+        FROM transactions
+        JOIN items ON items.id = transactions.item_id
+        JOIN users ON users.id = transactions.user_id
+        ORDER BY transactions.created_at DESC
+        LIMIT 5
+        """
+    ).fetchall()
+
     return render_template(
         "dashboard.html",
-        total_items=0,
-        low_stock_items=0,
-        total_transactions=0,
+        total_items=total_items,
+        low_stock_items=low_stock_items,
+        total_transactions=total_transactions,
+        recent_transactions=recent_transactions,
     )
 
 @app.route("/items")

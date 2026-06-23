@@ -12,15 +12,25 @@
         <h1>Nursing Inventory System</h1>
 
         {% block navigation %}
+        {% if session.get("user_id") %}
         <nav>
+            {% if session.get("user_role") == "administrator" and session.get("login_mode") == "admin" %}
+            <a href="{{ url_for('dashboard') }}">Admin Home</a>
+            <a href="{{ url_for('admin_users') }}">Manage Users</a>
+            <a href="{{ url_for('items') }}">Inventory Items</a>
+            <a href="{{ url_for('item_new') }}">Add Item</a>
+            <a href="{{ url_for('scan') }}">Scan Stock</a>
+            <a href="{{ url_for('transactions') }}">Transaction History</a>
+            <a href="{{ url_for('db_status') }}">Database Status</a>
+            {% else %}
             <a href="{{ url_for('dashboard') }}">Home</a>
-            <a href="/items">Items</a>
-            <a href="/scan">Scan</a>
-            <a href="/transactions">Transactions</a>
-            {% if session.get("user_id") %}
-            <a href="{{ url_for('logout') }}">Logout</a>
+            <a href="{{ url_for('items') }}">Items</a>
+            <a href="{{ url_for('scan') }}">Scan</a>
+            <a href="{{ url_for('transactions') }}">Transactions</a>
             {% endif %}
+            <a href="{{ url_for('logout') }}">Logout</a>
         </nav>
+        {% endif %}
         {% endblock %}
     </header>
 

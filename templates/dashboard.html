@@ -25,6 +25,31 @@
     </div>
 
     <h3>Recent Activity</h3>
-    <p>Recent inventory actions will appear here after transactions are added.</p>
+    {% if recent_transactions %}
+    <table>
+        <thead>
+            <tr>
+                <th>Date and Time</th>
+                <th>Action</th>
+                <th>Item</th>
+                <th>Quantity</th>
+                <th>User</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for transaction in recent_transactions %}
+            <tr>
+                <td>{{ transaction["created_at"] }}</td>
+                <td>{{ transaction["transaction_type"] }}</td>
+                <td>{{ transaction["item_name"] }}</td>
+                <td>{{ transaction["quantity"] }}</td>
+                <td>{{ transaction["user_name"] }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>No inventory actions have been recorded yet.</p>
+    {% endif %}
 </section>
 {% endblock %}
