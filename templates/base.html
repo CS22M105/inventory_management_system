@@ -9,7 +9,17 @@
 </head>
 <body>
     <header>
-        <h1>Nursing Inventory System</h1>
+        <div class="brand-header">
+            <img
+                class="brand-logo"
+                src="{{ url_for('static', filename='images/YU_logo.png') }}"
+                alt="Yeshiva University logo"
+            >
+            <div>
+                <h1>Katz</h1>
+                <p>Nursing School Inventory Management</p>
+            </div>
+        </div>
 
         {% block navigation %}
         {% if session.get("user_id") %}
