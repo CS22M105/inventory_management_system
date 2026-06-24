@@ -1,4 +1,4 @@
-from flask import Flask, Response, g, redirect, render_template, request, session, url_for
+from flask import Flask, Response, abort, g, redirect, render_template, request, session, url_for
 import csv
 import io
 import os
@@ -100,6 +100,34 @@ def require_item_manager():
         return redirect(url_for("items"))
 
     return None
+
+def get_item_form_data():
+    data = {
+        "barcode": request.form.get("barcode", "").strip(),
+        "name": request.form.get("name", "").strip(),
+        "bin_location": request.form.get("bin_location", "").strip(),
+        "room": request.form.get("room", "").strip(),
+        "company": request.form.get("company", "").strip(),
+        "location": request.form.get("location", "").strip(),
+        "expiration_date": request.form.get("expiration_date", "").strip(),
+        "notes": request.form.get("notes", "").strip(),
+    }
+
+    try:
+        data["quantity"] = int(request.form.get("quantity", "0"))
+        data["minimum_quantity"] = int(request.form.get("minimum_quantity", "0"))
+    except ValueError:
+        data["quantity"] = 0
+        data["minimum_quantity"] = 0
+        return data, "Quantity values must be numbers."
+
+    if not data["barcode"] or not data["name"] or not data["bin_location"] or not data["room"]:
+        return data, "Barcode, name, bin location, and room are required."
+
+    if data["quantity"] < 0 or data["minimum_quantity"] < 0:
+        return data, "Quantity values cannot be negative."
+
+    return data, None
 
 @app.teardown_appcontext
 def close_db(error=None):
@@ -257,26 +285,10 @@ def item_new():
         return manager_redirect
 
     if request.method == "POST":
-        barcode = request.form.get("barcode", "").strip()
-        name = request.form.get("name", "").strip()
-        bin_location = request.form.get("bin_location", "").strip()
-        room = request.form.get("room", "").strip()
-        company = request.form.get("company", "").strip()
-        location = request.form.get("location", "").strip()
-        expiration_date = request.form.get("expiration_date", "").strip()
-        notes = request.form.get("notes", "").strip()
+        item_data, error = get_item_form_data()
 
-        try:
-            quantity = int(request.form.get("quantity", "0"))
-            minimum_quantity = int(request.form.get("minimum_quantity", "0"))
-        except ValueError:
-            return render_template("item_new.html", error="Quantity values must be numbers."), 400
-
-        if not barcode or not name or not bin_location or not room:
-            return render_template("item_new.html", error="Barcode, name, bin location, and room are required."), 400
-
-        if quantity < 0 or minimum_quantity < 0:
-            return render_template("item_new.html", error="Quantity values cannot be negative."), 400
+        if error:
+            return render_template("item_new.html", error=error, item=item_data), 400
 
         db = get_db()
 
@@ -290,26 +302,113 @@ def item_new():
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
-                    barcode,
-                    name,
-                    bin_location,
-                    room,
-                    company,
-                    quantity,
-                    minimum_quantity,
-                    location,
-                    expiration_date,
-                    notes,
+                    item_data["barcode"],
+                    item_data["name"],
+                    item_data["bin_location"],
+                    item_data["room"],
+                    item_data["company"],
+                    item_data["quantity"],
+                    item_data["minimum_quantity"],
+                    item_data["location"],
+                    item_data["expiration_date"],
+                    item_data["notes"],
                 ),
             )
             db.commit()
         except psycopg2.IntegrityError:
             db.rollback()
-            return render_template("item_new.html", error="An item with this barcode already exists."), 400
+            return render_template(
+                "item_new.html",
+                error="An item with this barcode already exists.",
+                item=item_data,
+            ), 400
 
         return redirect(url_for("items"))
 
-    return render_template("item_new.html")
+    return render_template("item_new.html", item={})
+
+@app.route("/items/<int:item_id>/edit", methods=["GET", "POST"])
+def item_edit(item_id):
+    manager_redirect = require_item_manager()
+
+    if manager_redirect is not None:
+        return manager_redirect
+
+    db = get_db()
+    item = db.execute(
+        """
+        SELECT
+            id,
+            barcode,
+            name,
+            bin_location,
+            room,
+            company,
+            quantity,
+            minimum_quantity,
+            location,
+            expiration_date,
+            notes
+        FROM items
+        WHERE id = %s
+        """,
+        (item_id,),
+    ).fetchone()
+
+    if item is None:
+        abort(404)
+
+    if request.method == "POST":
+        item_data, error = get_item_form_data()
+
+        if error:
+            item_data["id"] = item_id
+            return render_template("item_edit.html", error=error, item=item_data), 400
+
+        try:
+            db.execute(
+                """
+                UPDATE items
+                SET
+                    barcode = %s,
+                    name = %s,
+                    bin_location = %s,
+                    room = %s,
+                    company = %s,
+                    quantity = %s,
+                    minimum_quantity = %s,
+                    location = %s,
+                    expiration_date = %s,
+                    notes = %s
+                WHERE id = %s
+                """,
+                (
+                    item_data["barcode"],
+                    item_data["name"],
+                    item_data["bin_location"],
+                    item_data["room"],
+                    item_data["company"],
+                    item_data["quantity"],
+                    item_data["minimum_quantity"],
+                    item_data["location"],
+                    item_data["expiration_date"],
+                    item_data["notes"],
+                    item_id,
+                ),
+            )
+            db.commit()
+        except psycopg2.IntegrityError:
+            db.rollback()
+            item_data["id"] = item_id
+            return render_template(
+                "item_edit.html",
+                error="An item with this barcode already exists.",
+                item=item_data,
+            ), 400
+
+        return redirect(url_for("items"))
+
+    return render_template("item_edit.html", item=item)
 
 @app.route("/scan", methods=["GET", "POST"])
 def scan():

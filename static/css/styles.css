@@ -113,6 +113,16 @@ section h2 {
     background: #7f1d1d;
 }
 
+.table-action-link {
+    color: #991b1b;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.table-action-link:hover {
+    text-decoration: underline;
+}
+
 .dashboard-grid {
     display: grid;
     gap: 16px;
