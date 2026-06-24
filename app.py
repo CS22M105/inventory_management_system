@@ -10,6 +10,8 @@ from pathlib import Path
 # holds the parent path to the current script we are running.
 BASE_DIR = Path(__file__).resolve().parent
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://localhost/inventory_management_system")
+ELEVATED_ROLES = {"administrator", "faculty"}
+ELEVATED_LOGIN_MODES = {"admin", "faculty"}
 SCHEMA = BASE_DIR / "schema.sql"
 
 app = Flask(__name__)
@@ -85,7 +87,7 @@ def require_admin():
     if login_redirect is not None:
         return login_redirect
 
-    if session.get("user_role") != "administrator" or session.get("login_mode") != "admin":
+    if session.get("user_role") not in ELEVATED_ROLES or session.get("login_mode") not in ELEVATED_LOGIN_MODES:
         return redirect(url_for("dashboard"))
 
     return None
@@ -96,7 +98,7 @@ def require_item_manager():
     if login_redirect is not None:
         return login_redirect
 
-    if session.get("user_role") not in {"faculty", "administrator"}:
+    if session.get("user_role") not in ELEVATED_ROLES:
         return redirect(url_for("items"))
 
     return None
@@ -175,10 +177,10 @@ def login():
                 error="You are not registered. Contact your administrator to register.",
             ), 401
 
-        if login_mode == "admin" and user["role"] != "administrator":
+        if login_mode in ELEVATED_LOGIN_MODES and user["role"] not in ELEVATED_ROLES:
             return render_template(
                 "login.html",
-                error="You are not registered as an administrator. Contact your administrator for access.",
+                error="You are not registered as faculty or administrator. Contact your administrator for access.",
             ), 403
 
         session.clear()

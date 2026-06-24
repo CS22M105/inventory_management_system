@@ -24,8 +24,8 @@
         {% block navigation %}
         {% if session.get("user_id") %}
         <nav>
-            {% if session.get("user_role") == "administrator" and session.get("login_mode") == "admin" %}
-            <a href="{{ url_for('dashboard') }}">Admin Home</a>
+            {% if session.get("user_role") in ["administrator", "faculty"] and session.get("login_mode") in ["admin", "faculty"] %}
+            <a href="{{ url_for('dashboard') }}">Home</a>
             <a href="{{ url_for('admin_users') }}">Manage Users</a>
             <a href="{{ url_for('items') }}">All Items</a>
             <a href="{{ url_for('low_stock_items') }}">Low Stock</a>
