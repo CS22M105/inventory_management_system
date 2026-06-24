@@ -475,3 +475,96 @@ Production configuration is partially prepared for cloud hosting
 ```
 
 This update improves both daily usability and future deployment readiness while keeping the existing local workflow intact.
+
+---
+
+## Role Permission Update - June 24, 2026
+
+The user roles were refined to better match the intended responsibilities of faculty and administrators.
+
+### 1. Faculty Permissions
+
+What was changed:
+
+- Faculty users can manage students.
+- Faculty users can:
+  - Add students.
+  - Activate students.
+  - Deactivate students.
+  - Delete inactive students when allowed.
+- Faculty users cannot add, activate, deactivate, or delete faculty users.
+- Faculty users cannot manage administrator accounts.
+- Faculty users cannot see or access the Database Status page.
+
+Why it was needed:
+
+- Faculty need enough access to manage student users during normal lab operations.
+- Faculty should not be able to control faculty accounts or system-level database information.
+- This keeps faculty as faculty while still giving them the operational access they need.
+
+How it was done:
+
+- The backend permission logic now checks which role is being managed.
+- Faculty sessions are allowed to manage only users with the `student` role.
+- The Add User page only shows role choices that the logged-in user is allowed to create.
+- The navigation bar hides Database Status from faculty users.
+- Direct access to the Database Status route is blocked for faculty users.
+
+### 2. Administrator Permissions
+
+What was changed:
+
+- Administrator users can manage students and faculty.
+- Administrator users can:
+  - Add students.
+  - Add faculty.
+  - Activate students and faculty.
+  - Deactivate students and faculty.
+  - Delete inactive students and faculty when allowed.
+- Administrator users can see and access the Database Status page.
+- Administrator accounts are permanent and protected.
+
+Why it was needed:
+
+- The administrator role should be the highest system role.
+- Administrators need control over faculty and student access.
+- Administrator accounts should not be accidentally removed or disabled because that could lock the system out of full control.
+
+How it was done:
+
+- A stricter admin-only check was added for Database Status.
+- User management actions now block any attempt to activate, deactivate, or delete administrator accounts.
+- The Manage Users page shows administrator accounts as:
+
+```text
+Permanent admin
+```
+
+- The Add User page no longer allows anyone to create another administrator from the web form.
+
+### 3. Verification Performed
+
+The following behavior was tested:
+
+- Faculty cannot access Database Status.
+- Faculty can add students only.
+- Faculty cannot create faculty users.
+- Faculty cannot deactivate faculty users.
+- Faculty can deactivate and delete allowed student users.
+- Administrator can access Database Status.
+- Administrator can add students and faculty.
+- Administrator can deactivate and delete allowed faculty users.
+- Administrator account `A1001` cannot be deactivated or deleted.
+
+### Current Result
+
+The role model is now clearer:
+
+```text
+Student: normal system user
+Faculty: manages students and inventory workflows
+Administrator: manages students, faculty, and system-level status
+Administrator account: permanent and protected
+```
+
+This update improves security and role clarity before moving the project toward barcode scanner testing and cloud deployment.
