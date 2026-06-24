@@ -270,3 +270,208 @@ Transaction is recorded
 ```
 
 This means the project has moved beyond planning and now has a functional prototype for the main inventory automation workflow.
+
+---
+
+## Progress Update - June 24, 2026
+
+Today, several improvements were made to move the inventory management system closer to a complete working prototype and prepare it for future cloud deployment. The work was done carefully in small steps so the existing local system would continue working.
+
+### 1. Faculty Login and Faculty Permissions
+
+What was done:
+
+- Added a separate Faculty option on the login page.
+- Updated the permission logic so faculty users receive the same system authority as administrators.
+- Faculty users can now access admin-level features such as:
+  - Manage Users.
+  - Add New Item.
+  - Edit Item.
+  - Export CSV.
+  - Database Status.
+
+Why it was needed:
+
+- The database already supported faculty users, but the login screen did not provide a clear Faculty login option.
+- In the project workflow, faculty members need the same level of access as administrators because they may manage users, inventory items, and transaction records.
+
+How it was done:
+
+- The login dropdown was updated to include Faculty.
+- The role-checking logic was updated so both `faculty` and `administrator` are treated as elevated roles.
+- The navigation menu was updated so faculty users see the same functional options as administrators.
+
+### 2. Optional Expiration Date
+
+What was done:
+
+- Made the item expiration date optional.
+- Set the default expiration date value to:
+
+```text
+00/00/0000
+```
+
+Why it was needed:
+
+- Some inventory items may not have an expiration date.
+- Requiring an expiration date would make item creation inconvenient or inaccurate for supplies that do not expire.
+
+How it was done:
+
+- The item form processing was updated so a blank expiration date is saved as `00/00/0000`.
+- The database schema was updated so new rows can also use this default.
+- The Add New Item and Edit Item forms were adjusted to show the default value.
+
+### 3. Transaction History Filters
+
+What was done:
+
+- Added filters to the Transaction History page.
+- Users can now filter transactions by:
+  - From Date.
+  - To Date.
+  - Item.
+  - User.
+  - Lab Instructor.
+  - Topic.
+  - Action type.
+
+Why it was needed:
+
+- As the system is used more, the transaction history will become long.
+- Filters make it easier to find specific records for a lab session, instructor, topic, item, user, or date range.
+
+How it was done:
+
+- The `/transactions` route was updated to read filter values from the page URL.
+- SQL conditions are added only when a filter is selected.
+- Item and user filters are populated from the database.
+- Action type supports Add Stock and Remove Stock.
+
+### 4. Lab Instructor and Topic Dropdown Filters
+
+What was done:
+
+- Changed Lab Instructor and Topic filters from text boxes to dropdown choices.
+
+Why it was needed:
+
+- Users may not remember the exact spelling of instructor names or lab topics.
+- Dropdowns reduce typing mistakes and make filtering easier.
+
+How it was done:
+
+- The system now reads distinct existing lab instructor names and topics from transaction records.
+- Empty instructor and topic values are excluded from the dropdown choices.
+- Selecting a value filters the transaction history by that exact instructor or topic.
+
+### 5. Transaction Filter Layout Fix
+
+What was done:
+
+- Fixed the User dropdown in the transaction filter area so it stays inside the filter box.
+
+Why it was needed:
+
+- Long user names or institution IDs could make the dropdown extend outside the filter rectangle.
+- This made the page look unpolished.
+
+How it was done:
+
+- CSS was updated so filter inputs and dropdowns use proper width and shrink correctly inside the grid layout.
+
+### 6. Transaction History CSV Export
+
+What was done:
+
+- Added a new CSV export for transaction history.
+- Added an Export Transactions CSV button below the filter rectangle.
+- The button was not added to the navigation bar.
+
+Why it was needed:
+
+- The system already supported inventory export.
+- Transaction history export is useful for reporting, record keeping, audits, and reviewing lab usage.
+
+How it was done:
+
+- A new `/transactions/export` route was added.
+- The export uses the same filter logic as the Transaction History page.
+- If no filters are applied, all transactions are exported.
+- If filters are applied, only the filtered transactions are exported.
+- The CSV includes:
+  - Date.
+  - Time.
+  - Action.
+  - Item.
+  - Barcode.
+  - Quantity.
+  - Lab Instructor.
+  - Topic.
+  - User.
+  - Notes.
+
+### 7. Production Configuration Preparation
+
+What was done:
+
+- Moved the Flask `SECRET_KEY` configuration to an environment variable.
+- Added production-friendly session cookie settings.
+- Added `gunicorn` to the project dependencies.
+- Added a `Procfile` for cloud deployment startup.
+- Added `.env.example` to document required environment variables.
+- Updated `.gitignore` to avoid committing `.env` and `.venv/`.
+- Updated the README with production configuration instructions.
+
+Why it was needed:
+
+- The project is currently running locally, but future deployment will require safer configuration.
+- Secret values should not be hardcoded in `app.py` or pushed to GitHub.
+- Flask's built-in development server is not intended for production hosting.
+
+How it was done:
+
+- `SECRET_KEY` now comes from the environment.
+- Local development still works with a development fallback.
+- Production mode requires `SECRET_KEY` to be set before the app starts.
+- `APP_ENV=production` enables secure cookie behavior.
+- Gunicorn can start the app using:
+
+```text
+web: gunicorn app:app
+```
+
+### 8. Verification Performed
+
+The following checks were used during development:
+
+- Python syntax checks using:
+
+```bash
+python -m py_compile app.py
+```
+
+- Flask route checks for new routes.
+- Test client checks for:
+  - Faculty login.
+  - Transaction filter rendering.
+  - Filtered transaction pages.
+  - Transaction CSV export with and without filters.
+  - Production configuration behavior.
+
+### Current Result
+
+The system now supports more complete inventory tracking and reporting:
+
+```text
+User, faculty, or admin logs in
+Inventory items are managed
+Stock is added or removed
+Transaction details are recorded
+Transactions can be filtered
+Filtered or complete transaction history can be exported
+Production configuration is partially prepared for cloud hosting
+```
+
+This update improves both daily usability and future deployment readiness while keeping the existing local workflow intact.
