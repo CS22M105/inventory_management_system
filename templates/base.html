@@ -27,18 +27,28 @@
             {% if session.get("user_role") in ["administrator", "faculty"] and session.get("login_mode") in ["admin", "faculty"] %}
             <a href="{{ url_for('dashboard') }}">Home</a>
             <a href="{{ url_for('admin_users') }}">Manage Users</a>
-            <a href="{{ url_for('items') }}">All Items</a>
-            <a href="{{ url_for('low_stock_items') }}">Low Stock</a>
-            <a href="{{ url_for('item_new') }}">Add New Item</a>
-            <a href="{{ url_for('scan') }}">Scan Item</a>
+            <details class="nav-dropdown">
+                <summary>Items</summary>
+                <div class="nav-dropdown-menu">
+                    <a href="{{ url_for('items') }}">All Items</a>
+                    <a href="{{ url_for('item_new') }}">Add New Item</a>
+                    <a href="{{ url_for('scan') }}">Scan Item</a>
+                    <a href="{{ url_for('low_stock_items') }}">Low Stock Items</a>
+                </div>
+            </details>
             <a href="{{ url_for('transactions') }}">Transaction History</a>
             <a href="{{ url_for('export_inventory') }}">Export CSV</a>
             <a href="{{ url_for('db_status') }}">Database Status</a>
             {% else %}
             <a href="{{ url_for('dashboard') }}">Home</a>
-            <a href="{{ url_for('items') }}">Items</a>
-            <a href="{{ url_for('low_stock_items') }}">Low Stock</a>
-            <a href="{{ url_for('scan') }}">Scan</a>
+            <details class="nav-dropdown">
+                <summary>Items</summary>
+                <div class="nav-dropdown-menu">
+                    <a href="{{ url_for('items') }}">All Items</a>
+                    <a href="{{ url_for('scan') }}">Scan Item</a>
+                    <a href="{{ url_for('low_stock_items') }}">Low Stock Items</a>
+                </div>
+            </details>
             <a href="{{ url_for('transactions') }}">Transactions</a>
             {% endif %}
             <a href="{{ url_for('logout') }}">Logout</a>

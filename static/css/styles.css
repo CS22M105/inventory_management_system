@@ -52,7 +52,8 @@ nav {
     gap: 12px;
 }
 
-nav a {
+nav a,
+.nav-dropdown summary {
     color: white;
     text-decoration: none;
     background: #991b1b;
@@ -61,8 +62,54 @@ nav a {
     border-radius: 6px;
 }
 
-nav a:hover {
+nav a:hover,
+.nav-dropdown summary:hover {
     background: #7f1d1d;
+}
+
+.nav-dropdown {
+    position: relative;
+}
+
+.nav-dropdown summary {
+    cursor: pointer;
+    display: block;
+    font-weight: 400;
+    list-style: none;
+}
+
+.nav-dropdown summary::-webkit-details-marker {
+    display: none;
+}
+
+.nav-dropdown summary::after {
+    content: " v";
+    font-size: 12px;
+}
+
+.nav-dropdown[open] summary {
+    background: #7f1d1d;
+}
+
+.nav-dropdown-menu {
+    background: white;
+    border: 1px solid rgba(153, 27, 27, 0.16);
+    border-radius: 6px;
+    box-shadow: 0 14px 32px rgba(69, 10, 10, 0.18);
+    display: grid;
+    gap: 6px;
+    left: 0;
+    min-width: 180px;
+    padding: 8px;
+    position: absolute;
+    top: calc(100% + 6px);
+    z-index: 10;
+}
+
+.nav-dropdown-menu a {
+    box-sizing: border-box;
+    display: block;
+    width: 100%;
 }
 
 main {
