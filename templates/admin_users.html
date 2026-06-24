@@ -39,8 +39,12 @@
                     {% endif %}
                 </td>
                 <td>
-                    {% if user["id"] == session.get("user_id") %}
+                    {% if user["role"] == "administrator" %}
+                    Permanent admin
+                    {% elif user["id"] == session.get("user_id") %}
                     Current account
+                    {% elif not can_manage_user_role(user["role"]) %}
+                    Protected
                     {% elif user["is_active"] %}
                     <form class="inline-form" method="post" action="{{ url_for('admin_user_deactivate', user_id=user['id']) }}">
                         <button class="danger-button" type="submit">Deactivate</button>

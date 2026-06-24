@@ -100,6 +100,17 @@ def require_admin():
 
     return None
 
+def require_system_admin():
+    login_redirect = require_login()
+
+    if login_redirect is not None:
+        return login_redirect
+
+    if session.get("user_role") != "administrator" or session.get("login_mode") != "admin":
+        return redirect(url_for("dashboard"))
+
+    return None
+
 def require_item_manager():
     login_redirect = require_login()
 
@@ -110,6 +121,18 @@ def require_item_manager():
         return redirect(url_for("items"))
 
     return None
+
+def allowed_user_roles_to_manage():
+    if session.get("user_role") == "administrator" and session.get("login_mode") == "admin":
+        return {"student", "faculty"}
+
+    if session.get("user_role") == "faculty" and session.get("login_mode") == "faculty":
+        return {"student"}
+
+    return set()
+
+def can_manage_user_role(role):
+    return role in allowed_user_roles_to_manage()
 
 def get_item_form_data():
     expiration_date = request.form.get("expiration_date", "").strip() or "00/00/0000"
@@ -793,7 +816,11 @@ def admin_users():
         """
     ).fetchall()
 
-    return render_template("admin_users.html", users=users)
+    return render_template(
+        "admin_users.html",
+        users=users,
+        can_manage_user_role=can_manage_user_role,
+    )
 
 @app.route("/admin/users/new", methods=["GET", "POST"])
 def admin_user_new():
@@ -802,16 +829,24 @@ def admin_user_new():
     if admin_redirect is not None:
         return admin_redirect
 
+    allowed_roles = allowed_user_roles_to_manage()
+    role_options = [
+        ("student", "Student"),
+        ("faculty", "Faculty"),
+    ]
+    role_options = [role for role in role_options if role[0] in allowed_roles]
+
     if request.method == "POST":
         institution_id = request.form.get("institution_id", "").strip()
         name = request.form.get("name", "").strip()
         role = request.form.get("role", "").strip()
         department = request.form.get("department", "").strip()
 
-        if not institution_id or not name or role not in {"student", "faculty", "administrator"}:
+        if not institution_id or not name or role not in allowed_roles:
             return render_template(
                 "user_new.html",
-                error="Institution ID, name, and a valid role are required.",
+                error="Institution ID, name, and an allowed role are required.",
+                role_options=role_options,
             ), 400
 
         db = get_db()
@@ -830,11 +865,12 @@ def admin_user_new():
             return render_template(
                 "user_new.html",
                 error="A user with this Institution ID already exists.",
+                role_options=role_options,
             ), 400
 
         return redirect(url_for("admin_users"))
 
-    return render_template("user_new.html")
+    return render_template("user_new.html", role_options=role_options)
 
 @app.route("/admin/users/<int:user_id>/deactivate", methods=["POST"])
 def admin_user_deactivate(user_id):
@@ -847,6 +883,18 @@ def admin_user_deactivate(user_id):
         return redirect(url_for("admin_users"))
 
     db = get_db()
+    user = db.execute(
+        """
+        SELECT id, role
+        FROM users
+        WHERE id = %s
+        """,
+        (user_id,),
+    ).fetchone()
+
+    if user is None or not can_manage_user_role(user["role"]):
+        return redirect(url_for("admin_users"))
+
     db.execute(
         """
         UPDATE users
@@ -867,6 +915,18 @@ def admin_user_activate(user_id):
         return admin_redirect
 
     db = get_db()
+    user = db.execute(
+        """
+        SELECT id, role
+        FROM users
+        WHERE id = %s
+        """,
+        (user_id,),
+    ).fetchone()
+
+    if user is None or not can_manage_user_role(user["role"]):
+        return redirect(url_for("admin_users"))
+
     db.execute(
         """
         UPDATE users
@@ -892,14 +952,14 @@ def admin_user_delete(user_id):
     db = get_db()
     user = db.execute(
         """
-        SELECT id, is_active
+        SELECT id, role, is_active
         FROM users
         WHERE id = %s
         """,
         (user_id,),
     ).fetchone()
 
-    if user is None or user["is_active"]:
+    if user is None or user["is_active"] or not can_manage_user_role(user["role"]):
         return redirect(url_for("admin_users"))
 
     transaction_count = db.execute(
@@ -927,7 +987,7 @@ def admin_user_delete(user_id):
 
 @app.route("/db-status")
 def db_status():
-    admin_redirect = require_admin()
+    admin_redirect = require_system_admin()
 
     if admin_redirect is not None:
         return admin_redirect

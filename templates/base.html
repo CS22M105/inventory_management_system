@@ -38,7 +38,9 @@
             </details>
             <a href="{{ url_for('transactions') }}">Transaction History</a>
             <a href="{{ url_for('export_inventory') }}">Export CSV</a>
+            {% if session.get("user_role") == "administrator" and session.get("login_mode") == "admin" %}
             <a href="{{ url_for('db_status') }}">Database Status</a>
+            {% endif %}
             {% else %}
             <a href="{{ url_for('dashboard') }}">Home</a>
             <details class="nav-dropdown">

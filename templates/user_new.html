@@ -33,9 +33,9 @@
         <label for="role">Role</label>
         <select id="role" name="role" required>
             <option value="">Select a role</option>
-            <option value="student">Student</option>
-            <option value="faculty">Faculty</option>
-            <option value="administrator">Administrator</option>
+            {% for role_value, role_label in role_options %}
+            <option value="{{ role_value }}">{{ role_label }}</option>
+            {% endfor %}
         </select>
 
         <label for="department">Department</label>
