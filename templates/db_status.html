@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}Database Status | Nursing Inventory System{% endblock %}
+
+{% block content %}
+<section>
+    <div class="page-header">
+        <div>
+            <h2>Database Status</h2>
+            <p>Quick health check for the main inventory database tables.</p>
+        </div>
+
+        <span class="status-badge">PostgreSQL Connected</span>
+    </div>
+
+    <div class="status-grid">
+        <article>
+            <h3>Registered Users</h3>
+            <p>{{ user_count }}</p>
+            <span>Rows in users table</span>
+        </article>
+
+        <article>
+            <h3>Inventory Items</h3>
+            <p>{{ item_count }}</p>
+            <span>Rows in items table</span>
+        </article>
+
+        <article>
+            <h3>Transactions</h3>
+            <p>{{ transaction_count }}</p>
+            <span>Rows in transactions table</span>
+        </article>
+    </div>
+
+    <table class="status-table">
+        <thead>
+            <tr>
+                <th>Table</th>
+                <th>Purpose</th>
+                <th>Rows</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>users</td>
+                <td>Stores registered people who can log in.</td>
+                <td>{{ user_count }}</td>
+            </tr>
+            <tr>
+                <td>items</td>
+                <td>Stores current inventory records and quantities.</td>
+                <td>{{ item_count }}</td>
+            </tr>
+            <tr>
+                <td>transactions</td>
+                <td>Stores add/remove stock history for accountability.</td>
+                <td>{{ transaction_count }}</td>
+            </tr>
+        </tbody>
+    </table>
+</section>
+{% endblock %}
