@@ -511,6 +511,65 @@ def transactions():
 
     db = get_db()
     ensure_transaction_columns(db)
+
+    filters = {
+        "date_from": request.args.get("date_from", "").strip(),
+        "date_to": request.args.get("date_to", "").strip(),
+        "item_id": request.args.get("item_id", "").strip(),
+        "user_id": request.args.get("user_id", "").strip(),
+        "lab_instructor": request.args.get("lab_instructor", "").strip(),
+        "topic_of_day": request.args.get("topic_of_day", "").strip(),
+        "transaction_type": request.args.get("transaction_type", "").strip(),
+    }
+    conditions = []
+    params = []
+
+    if filters["date_from"]:
+        conditions.append("transactions.transaction_date >= %s")
+        params.append(filters["date_from"])
+
+    if filters["date_to"]:
+        conditions.append("transactions.transaction_date <= %s")
+        params.append(filters["date_to"])
+
+    if filters["item_id"].isdigit():
+        conditions.append("transactions.item_id = %s")
+        params.append(int(filters["item_id"]))
+
+    if filters["user_id"].isdigit():
+        conditions.append("transactions.user_id = %s")
+        params.append(int(filters["user_id"]))
+
+    if filters["lab_instructor"]:
+        conditions.append("transactions.lab_instructor ILIKE %s")
+        params.append(f"%{filters['lab_instructor']}%")
+
+    if filters["topic_of_day"]:
+        conditions.append("transactions.topic_of_day ILIKE %s")
+        params.append(f"%{filters['topic_of_day']}%")
+
+    if filters["transaction_type"] in {"add", "remove"}:
+        conditions.append("transactions.transaction_type = %s")
+        params.append(filters["transaction_type"])
+
+    where_clause = ""
+    if conditions:
+        where_clause = "WHERE " + " AND ".join(conditions)
+
+    items = db.execute(
+        """
+        SELECT id, name, barcode
+        FROM items
+        ORDER BY name, barcode
+        """
+    ).fetchall()
+    users = db.execute(
+        """
+        SELECT id, name, institution_id
+        FROM users
+        ORDER BY name, institution_id
+        """
+    ).fetchall()
     transaction_rows = db.execute(
         """
         SELECT
@@ -528,11 +587,19 @@ def transactions():
         FROM transactions
         JOIN items ON items.id = transactions.item_id
         JOIN users ON users.id = transactions.user_id
+        {where_clause}
         ORDER BY transactions.transaction_date DESC, transactions.transaction_time DESC, transactions.id DESC
-        """
+        """.format(where_clause=where_clause),
+        params,
     ).fetchall()
 
-    return render_template("transactions.html", transactions=transaction_rows)
+    return render_template(
+        "transactions.html",
+        transactions=transaction_rows,
+        filters=filters,
+        items=items,
+        users=users,
+    )
 
 @app.route("/reports/export")
 def export_inventory():

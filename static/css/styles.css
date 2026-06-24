@@ -216,6 +216,39 @@ form {
     margin-top: 24px;
 }
 
+.filter-form {
+    align-items: end;
+    background: rgba(255, 247, 247, 0.88);
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+    display: grid;
+    gap: 14px;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    margin: 0 0 24px;
+    max-width: none;
+    padding: 16px;
+}
+
+.filter-form div {
+    display: grid;
+    gap: 6px;
+}
+
+.filter-actions {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.secondary-link {
+    background: #52606d;
+}
+
+.secondary-link:hover {
+    background: #323f4b;
+}
+
 label {
     font-weight: 700;
 }
