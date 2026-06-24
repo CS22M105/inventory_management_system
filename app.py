@@ -13,9 +13,17 @@ DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://localhost/inventory_
 ELEVATED_ROLES = {"administrator", "faculty"}
 ELEVATED_LOGIN_MODES = {"admin", "faculty"}
 SCHEMA = BASE_DIR / "schema.sql"
+APP_ENV = os.environ.get("APP_ENV", "development").lower()
+SECRET_KEY = os.environ.get("SECRET_KEY")
 
 app = Flask(__name__)
-app.config["SECRET_KEY"] = "dev-secret-key-change-before-production"
+if APP_ENV == "production" and not SECRET_KEY:
+    raise RuntimeError("SECRET_KEY environment variable must be set in production.")
+
+app.config["SECRET_KEY"] = SECRET_KEY or "dev-secret-key-change-before-production"
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SECURE"] = APP_ENV == "production"
 
 
 class Database:

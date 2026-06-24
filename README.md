@@ -95,6 +95,12 @@ To use a different PostgreSQL database, set `DATABASE_URL` before running Flask:
 export DATABASE_URL="postgresql://username:password@localhost:5432/inventory_management_system"
 ```
 
+Set a secret key for sessions:
+
+```bash
+export SECRET_KEY="replace-with-a-long-random-secret-key"
+```
+
 Initialize the database tables and demo users:
 
 ```bash
@@ -106,6 +112,28 @@ Run the app:
 ```bash
 flask --app app run --debug
 ```
+
+## Production Configuration
+
+Copy the example environment file and set real values on the server or cloud platform:
+
+```bash
+cp .env.example .env
+```
+
+Required environment variables:
+
+- `SECRET_KEY`: long random value used to protect user sessions.
+- `DATABASE_URL`: PostgreSQL connection string.
+- `APP_ENV`: use `production` in deployed environments.
+
+The app includes a `Procfile` for platforms that support it:
+
+```text
+web: gunicorn app:app
+```
+
+For cloud hosting, install dependencies from `requirements.txt`, set the environment variables, initialize the PostgreSQL database once, and start the app with Gunicorn.
 
 ## Planned Project Structure
 
