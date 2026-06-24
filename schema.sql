@@ -34,6 +34,8 @@ CREATE TABLE transactions (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     transaction_date DATE NOT NULL DEFAULT CURRENT_DATE,
     transaction_time TIME(0) NOT NULL DEFAULT LOCALTIME(0),
+    lab_instructor TEXT,
+    topic_of_day TEXT,
     notes TEXT,
     FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE RESTRICT,
     FOREIGN KEY (item_id) REFERENCES items (id) ON DELETE RESTRICT

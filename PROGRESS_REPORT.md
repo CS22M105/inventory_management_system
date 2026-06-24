@@ -180,6 +180,7 @@ Completed:
 - Users can remove stock.
 - System prevents removing more items than are available.
 - Each add/remove action creates a transaction record.
+- Each transaction can include lab instructor name and topic of the day.
 
 Current scan workflow:
 
@@ -188,6 +189,7 @@ User logs in
 User scans or enters barcode
 User selects Add Stock or Remove Stock
 User enters quantity
+User can enter lab instructor and topic of the day
 System updates item quantity
 System records transaction
 ```

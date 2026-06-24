@@ -21,6 +21,8 @@
                 <th>Item</th>
                 <th>Barcode</th>
                 <th>Quantity</th>
+                <th>Lab Instructor</th>
+                <th>Topic</th>
                 <th>User</th>
                 <th>Notes</th>
             </tr>
@@ -34,6 +36,8 @@
                 <td>{{ transaction["item_name"] }}</td>
                 <td>{{ transaction["barcode"] }}</td>
                 <td>{{ transaction["quantity"] }}</td>
+                <td>{{ transaction["lab_instructor"] or "Not set" }}</td>
+                <td>{{ transaction["topic_of_day"] or "Not set" }}</td>
                 <td>{{ transaction["user_name"] }}</td>
                 <td>{{ transaction["notes"] or "No notes" }}</td>
             </tr>

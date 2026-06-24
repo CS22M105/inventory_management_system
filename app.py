@@ -48,9 +48,11 @@ def get_db():
         # This allows us to access columns by name.
     return g.db
 
-def ensure_transaction_datetime_columns(db):
+def ensure_transaction_columns(db):
     db.execute("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS transaction_date DATE")
     db.execute("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS transaction_time TIME(0)")
+    db.execute("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS lab_instructor TEXT")
+    db.execute("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS topic_of_day TEXT")
     db.execute("ALTER TABLE transactions ALTER COLUMN transaction_date SET DEFAULT CURRENT_DATE")
     db.execute("ALTER TABLE transactions ALTER COLUMN transaction_time SET DEFAULT LOCALTIME(0)")
     db.execute(
@@ -173,7 +175,7 @@ def dashboard():
         return login_redirect
 
     db = get_db()
-    ensure_transaction_datetime_columns(db)
+    ensure_transaction_columns(db)
     total_items = db.execute("SELECT COUNT(*) AS total FROM items").fetchone()["total"]
     low_stock_items = db.execute(
         """
@@ -190,6 +192,8 @@ def dashboard():
             transactions.quantity,
             TO_CHAR(transactions.transaction_date, 'YYYY-MM-DD') AS transaction_date,
             TO_CHAR(transactions.transaction_time, 'HH24:MI:SS') AS transaction_time,
+            transactions.lab_instructor,
+            transactions.topic_of_day,
             items.name AS item_name,
             users.name AS user_name
         FROM transactions
@@ -298,6 +302,8 @@ def scan():
     if request.method == "POST":
         barcode = request.form.get("barcode", "").strip()
         transaction_type = request.form.get("transaction_type", "").strip()
+        lab_instructor = request.form.get("lab_instructor", "").strip()
+        topic_of_day = request.form.get("topic_of_day", "").strip()
         notes = request.form.get("notes", "").strip()
 
         try:
@@ -315,7 +321,7 @@ def scan():
             return render_template("scan.html", error="Quantity must be greater than zero."), 400
 
         db = get_db()
-        ensure_transaction_datetime_columns(db)
+        ensure_transaction_columns(db)
         item = db.execute(
             """
             SELECT id, name, quantity
@@ -349,10 +355,21 @@ def scan():
         )
         db.execute(
             """
-            INSERT INTO transactions (user_id, item_id, transaction_type, quantity, notes)
-            VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO transactions (
+                user_id, item_id, transaction_type, quantity,
+                lab_instructor, topic_of_day, notes
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
             """,
-            (session["user_id"], item["id"], transaction_type, quantity, notes),
+            (
+                session["user_id"],
+                item["id"],
+                transaction_type,
+                quantity,
+                lab_instructor,
+                topic_of_day,
+                notes,
+            ),
         )
         db.commit()
 
@@ -371,7 +388,7 @@ def transactions():
         return login_redirect
 
     db = get_db()
-    ensure_transaction_datetime_columns(db)
+    ensure_transaction_columns(db)
     transaction_rows = db.execute(
         """
         SELECT
@@ -380,6 +397,8 @@ def transactions():
             transactions.quantity,
             TO_CHAR(transactions.transaction_date, 'YYYY-MM-DD') AS transaction_date,
             TO_CHAR(transactions.transaction_time, 'HH24:MI:SS') AS transaction_time,
+            transactions.lab_instructor,
+            transactions.topic_of_day,
             transactions.notes,
             items.name AS item_name,
             items.barcode,

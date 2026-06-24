@@ -34,6 +34,8 @@
                 <th>Action</th>
                 <th>Item</th>
                 <th>Quantity</th>
+                <th>Lab Instructor</th>
+                <th>Topic</th>
                 <th>User</th>
             </tr>
         </thead>
@@ -45,6 +47,8 @@
                 <td>{{ transaction["transaction_type"] }}</td>
                 <td>{{ transaction["item_name"] }}</td>
                 <td>{{ transaction["quantity"] }}</td>
+                <td>{{ transaction["lab_instructor"] or "Not set" }}</td>
+                <td>{{ transaction["topic_of_day"] or "Not set" }}</td>
                 <td>{{ transaction["user_name"] }}</td>
             </tr>
             {% endfor %}
