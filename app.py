@@ -102,6 +102,8 @@ def require_item_manager():
     return None
 
 def get_item_form_data():
+    expiration_date = request.form.get("expiration_date", "").strip() or "00/00/0000"
+
     data = {
         "barcode": request.form.get("barcode", "").strip(),
         "name": request.form.get("name", "").strip(),
@@ -109,7 +111,7 @@ def get_item_form_data():
         "room": request.form.get("room", "").strip(),
         "company": request.form.get("company", "").strip(),
         "location": request.form.get("location", "").strip(),
-        "expiration_date": request.form.get("expiration_date", "").strip(),
+        "expiration_date": expiration_date,
         "notes": request.form.get("notes", "").strip(),
     }
 
