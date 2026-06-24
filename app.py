@@ -502,17 +502,8 @@ def scan():
 
     return render_template("scan.html")
 
-@app.route("/transactions")
-def transactions():
-    login_redirect = require_login()
-
-    if login_redirect is not None:
-        return login_redirect
-
-    db = get_db()
-    ensure_transaction_columns(db)
-
-    filters = {
+def get_transaction_filters():
+    return {
         "date_from": request.args.get("date_from", "").strip(),
         "date_to": request.args.get("date_to", "").strip(),
         "item_id": request.args.get("item_id", "").strip(),
@@ -521,6 +512,8 @@ def transactions():
         "topic_of_day": request.args.get("topic_of_day", "").strip(),
         "transaction_type": request.args.get("transaction_type", "").strip(),
     }
+
+def build_transaction_filter_clause(filters):
     conditions = []
     params = []
 
@@ -556,6 +549,35 @@ def transactions():
     if conditions:
         where_clause = "WHERE " + " AND ".join(conditions)
 
+    return where_clause, params
+
+def get_transaction_rows(db, filters):
+    where_clause, params = build_transaction_filter_clause(filters)
+
+    return db.execute(
+        """
+        SELECT
+            transactions.id,
+            transactions.transaction_type,
+            transactions.quantity,
+            TO_CHAR(transactions.transaction_date, 'YYYY-MM-DD') AS transaction_date,
+            TO_CHAR(transactions.transaction_time, 'HH24:MI:SS') AS transaction_time,
+            transactions.lab_instructor,
+            transactions.topic_of_day,
+            transactions.notes,
+            items.name AS item_name,
+            items.barcode,
+            users.name AS user_name
+        FROM transactions
+        JOIN items ON items.id = transactions.item_id
+        JOIN users ON users.id = transactions.user_id
+        {where_clause}
+        ORDER BY transactions.transaction_date DESC, transactions.transaction_time DESC, transactions.id DESC
+        """.format(where_clause=where_clause),
+        params,
+    ).fetchall()
+
+def get_transaction_filter_options(db):
     items = db.execute(
         """
         SELECT id, name, barcode
@@ -586,28 +608,23 @@ def transactions():
         ORDER BY topic_of_day
         """
     ).fetchall()
-    transaction_rows = db.execute(
-        """
-        SELECT
-            transactions.id,
-            transactions.transaction_type,
-            transactions.quantity,
-            TO_CHAR(transactions.transaction_date, 'YYYY-MM-DD') AS transaction_date,
-            TO_CHAR(transactions.transaction_time, 'HH24:MI:SS') AS transaction_time,
-            transactions.lab_instructor,
-            transactions.topic_of_day,
-            transactions.notes,
-            items.name AS item_name,
-            items.barcode,
-            users.name AS user_name
-        FROM transactions
-        JOIN items ON items.id = transactions.item_id
-        JOIN users ON users.id = transactions.user_id
-        {where_clause}
-        ORDER BY transactions.transaction_date DESC, transactions.transaction_time DESC, transactions.id DESC
-        """.format(where_clause=where_clause),
-        params,
-    ).fetchall()
+
+    return items, users, lab_instructors, topics
+
+@app.route("/transactions")
+def transactions():
+    login_redirect = require_login()
+
+    if login_redirect is not None:
+        return login_redirect
+
+    db = get_db()
+    ensure_transaction_columns(db)
+
+    filters = get_transaction_filters()
+    items, users, lab_instructors, topics = get_transaction_filter_options(db)
+    transaction_rows = get_transaction_rows(db, filters)
+    export_params = {key: value for key, value in filters.items() if value}
 
     return render_template(
         "transactions.html",
@@ -617,6 +634,57 @@ def transactions():
         users=users,
         lab_instructors=lab_instructors,
         topics=topics,
+        export_url=url_for("export_transactions", **export_params),
+    )
+
+@app.route("/transactions/export")
+def export_transactions():
+    login_redirect = require_login()
+
+    if login_redirect is not None:
+        return login_redirect
+
+    db = get_db()
+    ensure_transaction_columns(db)
+    transaction_rows = get_transaction_rows(db, get_transaction_filters())
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(
+        [
+            "Date",
+            "Time",
+            "Action",
+            "Item",
+            "Barcode",
+            "Quantity",
+            "Lab Instructor",
+            "Topic",
+            "User",
+            "Notes",
+        ]
+    )
+
+    for transaction in transaction_rows:
+        writer.writerow(
+            [
+                transaction["transaction_date"],
+                transaction["transaction_time"],
+                transaction["transaction_type"],
+                transaction["item_name"],
+                transaction["barcode"],
+                transaction["quantity"],
+                transaction["lab_instructor"],
+                transaction["topic_of_day"],
+                transaction["user_name"],
+                transaction["notes"],
+            ]
+        )
+
+    return Response(
+        output.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment; filename=transaction_history_export.csv"},
     )
 
 @app.route("/reports/export")

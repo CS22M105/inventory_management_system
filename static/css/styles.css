@@ -232,6 +232,14 @@ form {
 .filter-form div {
     display: grid;
     gap: 6px;
+    min-width: 0;
+}
+
+.filter-form input,
+.filter-form select {
+    box-sizing: border-box;
+    min-width: 0;
+    width: 100%;
 }
 
 .filter-actions {
@@ -239,6 +247,10 @@ form {
     display: flex;
     flex-wrap: wrap;
     gap: 10px;
+}
+
+.filter-export-actions {
+    margin: 0 0 24px;
 }
 
 .secondary-link {
