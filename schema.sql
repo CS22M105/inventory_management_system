@@ -3,16 +3,16 @@ DROP TABLE IF EXISTS items;
 DROP TABLE IF EXISTS users;
 
 CREATE TABLE users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     institution_id TEXT NOT NULL UNIQUE,
     name TEXT NOT NULL,
     role TEXT NOT NULL,
     department TEXT,
-    is_active INTEGER NOT NULL DEFAULT 1
+    is_active BOOLEAN NOT NULL DEFAULT TRUE
 );
 
 CREATE TABLE items (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     barcode TEXT NOT NULL UNIQUE,
     name TEXT NOT NULL,
     bin_location TEXT NOT NULL,
@@ -26,15 +26,17 @@ CREATE TABLE items (
 );
 
 CREATE TABLE transactions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL,
     item_id INTEGER NOT NULL,
     transaction_type TEXT NOT NULL,
     quantity INTEGER NOT NULL,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    transaction_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    transaction_time TIME(0) NOT NULL DEFAULT LOCALTIME(0),
     notes TEXT,
-    FOREIGN KEY (user_id) REFERENCES users (id),
-    FOREIGN KEY (item_id) REFERENCES items (id)
+    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE RESTRICT,
+    FOREIGN KEY (item_id) REFERENCES items (id) ON DELETE RESTRICT
 );
 
 INSERT INTO users (institution_id, name, role, department)

@@ -159,7 +159,7 @@ Current item fields include:
 - Item name.
 - Room.
 - Bin location.
-- Company.
+- Vendor.
 - Quantity.
 - Minimum quantity.
 - General location.

@@ -2,8 +2,8 @@ from flask import Flask, Response, g, redirect, render_template, request, sessio
 import csv
 import io
 import os
-import psycopg
-from psycopg.rows import dict_row
+import psycopg2
+from psycopg2.extras import RealDictCursor
 import click
 from pathlib import Path
 
@@ -16,13 +16,60 @@ app = Flask(__name__)
 app.config["SECRET_KEY"] = "dev-secret-key-change-before-production"
 
 
+class Database:
+    def __init__(self, connection):
+        self.connection = connection
+
+    def execute(self, query, params=None):
+        cursor = self.connection.cursor()
+        cursor.execute(query, params)
+        return cursor
+
+    def commit(self):
+        self.connection.commit()
+
+    def rollback(self):
+        self.connection.rollback()
+
+    def close(self):
+        self.connection.close()
+
+
 def get_db():
     if "db" not in g: # g is for Global, it is a 
         # special object that Flask provides to store data during the 
         # request lifecycle.
-        g.db = psycopg.connect(DATABASE_URL, row_factory=dict_row)
+        connection = psycopg2.connect(
+            DATABASE_URL,
+            connect_timeout=5,
+            cursor_factory=RealDictCursor,
+        )
+        g.db = Database(connection)
         # This allows us to access columns by name.
     return g.db
+
+def ensure_transaction_datetime_columns(db):
+    db.execute("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS transaction_date DATE")
+    db.execute("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS transaction_time TIME(0)")
+    db.execute("ALTER TABLE transactions ALTER COLUMN transaction_date SET DEFAULT CURRENT_DATE")
+    db.execute("ALTER TABLE transactions ALTER COLUMN transaction_time SET DEFAULT LOCALTIME(0)")
+    db.execute(
+        """
+        UPDATE transactions
+        SET transaction_date = created_at::date
+        WHERE transaction_date IS NULL
+        """
+    )
+    db.execute(
+        """
+        UPDATE transactions
+        SET transaction_time = created_at::time(0)
+        WHERE transaction_time IS NULL
+        """
+    )
+    db.execute("ALTER TABLE transactions ALTER COLUMN transaction_date SET NOT NULL")
+    db.execute("ALTER TABLE transactions ALTER COLUMN transaction_time SET NOT NULL")
+    db.commit()
 
 def require_login():
     if "user_id" not in session:
@@ -126,6 +173,7 @@ def dashboard():
         return login_redirect
 
     db = get_db()
+    ensure_transaction_datetime_columns(db)
     total_items = db.execute("SELECT COUNT(*) AS total FROM items").fetchone()["total"]
     low_stock_items = db.execute(
         """
@@ -140,13 +188,14 @@ def dashboard():
         SELECT
             transactions.transaction_type,
             transactions.quantity,
-            transactions.created_at,
+            TO_CHAR(transactions.transaction_date, 'YYYY-MM-DD') AS transaction_date,
+            TO_CHAR(transactions.transaction_time, 'HH24:MI:SS') AS transaction_time,
             items.name AS item_name,
             users.name AS user_name
         FROM transactions
         JOIN items ON items.id = transactions.item_id
         JOIN users ON users.id = transactions.user_id
-        ORDER BY transactions.created_at DESC
+        ORDER BY transactions.transaction_date DESC, transactions.transaction_time DESC, transactions.id DESC
         LIMIT 5
         """
     ).fetchall()
@@ -231,7 +280,7 @@ def item_new():
                 ),
             )
             db.commit()
-        except psycopg.IntegrityError:
+        except psycopg2.IntegrityError:
             db.rollback()
             return render_template("item_new.html", error="An item with this barcode already exists."), 400
 
@@ -266,6 +315,7 @@ def scan():
             return render_template("scan.html", error="Quantity must be greater than zero."), 400
 
         db = get_db()
+        ensure_transaction_datetime_columns(db)
         item = db.execute(
             """
             SELECT id, name, quantity
@@ -321,13 +371,15 @@ def transactions():
         return login_redirect
 
     db = get_db()
+    ensure_transaction_datetime_columns(db)
     transaction_rows = db.execute(
         """
         SELECT
             transactions.id,
             transactions.transaction_type,
             transactions.quantity,
-            transactions.created_at,
+            TO_CHAR(transactions.transaction_date, 'YYYY-MM-DD') AS transaction_date,
+            TO_CHAR(transactions.transaction_time, 'HH24:MI:SS') AS transaction_time,
             transactions.notes,
             items.name AS item_name,
             items.barcode,
@@ -335,7 +387,7 @@ def transactions():
         FROM transactions
         JOIN items ON items.id = transactions.item_id
         JOIN users ON users.id = transactions.user_id
-        ORDER BY transactions.created_at DESC
+        ORDER BY transactions.transaction_date DESC, transactions.transaction_time DESC, transactions.id DESC
         """
     ).fetchall()
 
@@ -375,7 +427,7 @@ def export_inventory():
             "Item Name",
             "Bin Location",
             "Room",
-            "Company",
+            "Vendor",
             "Quantity",
             "Minimum Quantity",
             "General Location",
@@ -465,7 +517,7 @@ def admin_user_new():
                 (institution_id, name, role, department),
             )
             db.commit()
-        except psycopg.IntegrityError:
+        except psycopg2.IntegrityError:
             db.rollback()
             return render_template(
                 "user_new.html",

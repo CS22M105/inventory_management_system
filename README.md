@@ -13,15 +13,16 @@ The goal is to replace manual Excel-based inventory tracking with a simple web a
 
 ## Current Status
 
-The project is in the early skeleton stage.
+The project is a working local Flask prototype.
 
 Completed so far:
 
-- Created the project plan.
-- Created `requirements.txt`.
-- Installed Flask in the `invent` virtual environment.
-- Created the main project folders.
-- Created this `README.md` setup file.
+- Registered user and administrator login.
+- Inventory item creation and listing.
+- Barcode-based add/remove stock workflow.
+- Transaction history.
+- Dashboard counts.
+- CSV inventory export.
 
 ## Technology
 
@@ -29,7 +30,7 @@ This project will use:
 
 - **Python** for backend logic.
 - **Flask** for the web application.
-- **SQLite** for the first local database.
+- **PostgreSQL** for the database.
 - **HTML/CSS/JavaScript** for the user interface.
 
 ## Virtual Environment
@@ -62,7 +63,7 @@ After activating the virtual environment, install the required packages with:
 pip install -r requirements.txt
 ```
 
-Currently, the main dependency is Flask.
+The main dependencies are Flask and psycopg.
 
 ## Check Flask Installation
 
@@ -74,6 +75,38 @@ python -m flask --version
 
 Expected result should show Flask version information.
 
+## PostgreSQL Setup
+
+Create a local PostgreSQL database:
+
+```bash
+createdb inventory_management_system
+```
+
+By default, the app connects to:
+
+```text
+postgresql://localhost/inventory_management_system
+```
+
+To use a different PostgreSQL database, set `DATABASE_URL` before running Flask:
+
+```bash
+export DATABASE_URL="postgresql://username:password@localhost:5432/inventory_management_system"
+```
+
+Initialize the database tables and demo users:
+
+```bash
+flask --app app init-db
+```
+
+Run the app:
+
+```bash
+flask --app app run --debug
+```
+
 ## Planned Project Structure
 
 ```text
@@ -83,19 +116,8 @@ inventory/
   README.md
   schema.sql
   PROJECT_DOCUMENTATION.md
-  data/
   templates/
   static/
     css/
     js/
 ```
-
-## Next Development Step
-
-The next small task is to create the main Flask application file:
-
-```text
-app.py
-```
-
-That file will eventually start the web app and define the first pages.
