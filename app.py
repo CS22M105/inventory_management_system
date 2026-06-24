@@ -541,12 +541,12 @@ def transactions():
         params.append(int(filters["user_id"]))
 
     if filters["lab_instructor"]:
-        conditions.append("transactions.lab_instructor ILIKE %s")
-        params.append(f"%{filters['lab_instructor']}%")
+        conditions.append("transactions.lab_instructor = %s")
+        params.append(filters["lab_instructor"])
 
     if filters["topic_of_day"]:
-        conditions.append("transactions.topic_of_day ILIKE %s")
-        params.append(f"%{filters['topic_of_day']}%")
+        conditions.append("transactions.topic_of_day = %s")
+        params.append(filters["topic_of_day"])
 
     if filters["transaction_type"] in {"add", "remove"}:
         conditions.append("transactions.transaction_type = %s")
@@ -568,6 +568,22 @@ def transactions():
         SELECT id, name, institution_id
         FROM users
         ORDER BY name, institution_id
+        """
+    ).fetchall()
+    lab_instructors = db.execute(
+        """
+        SELECT DISTINCT lab_instructor
+        FROM transactions
+        WHERE NULLIF(BTRIM(lab_instructor), '') IS NOT NULL
+        ORDER BY lab_instructor
+        """
+    ).fetchall()
+    topics = db.execute(
+        """
+        SELECT DISTINCT topic_of_day
+        FROM transactions
+        WHERE NULLIF(BTRIM(topic_of_day), '') IS NOT NULL
+        ORDER BY topic_of_day
         """
     ).fetchall()
     transaction_rows = db.execute(
@@ -599,6 +615,8 @@ def transactions():
         filters=filters,
         items=items,
         users=users,
+        lab_instructors=lab_instructors,
+        topics=topics,
     )
 
 @app.route("/reports/export")

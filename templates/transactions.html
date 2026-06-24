@@ -58,22 +58,26 @@
 
         <div>
             <label for="lab_instructor">Lab Instructor</label>
-            <input
-                type="text"
-                id="lab_instructor"
-                name="lab_instructor"
-                value="{{ filters.get('lab_instructor', '') }}"
-            >
+            <select id="lab_instructor" name="lab_instructor">
+                <option value="">All lab instructors</option>
+                {% for instructor in lab_instructors %}
+                <option value="{{ instructor['lab_instructor'] }}" {% if filters.get('lab_instructor') == instructor['lab_instructor'] %}selected{% endif %}>
+                    {{ instructor["lab_instructor"] }}
+                </option>
+                {% endfor %}
+            </select>
         </div>
 
         <div>
             <label for="topic_of_day">Topic</label>
-            <input
-                type="text"
-                id="topic_of_day"
-                name="topic_of_day"
-                value="{{ filters.get('topic_of_day', '') }}"
-            >
+            <select id="topic_of_day" name="topic_of_day">
+                <option value="">All topics</option>
+                {% for topic in topics %}
+                <option value="{{ topic['topic_of_day'] }}" {% if filters.get('topic_of_day') == topic['topic_of_day'] %}selected{% endif %}>
+                    {{ topic["topic_of_day"] }}
+                </option>
+                {% endfor %}
+            </select>
         </div>
 
         <div>
