@@ -185,10 +185,16 @@ def login():
                 error="You are not registered. Contact your administrator to register.",
             ), 401
 
-        if login_mode in ELEVATED_LOGIN_MODES and user["role"] not in ELEVATED_ROLES:
+        if login_mode == "admin" and user["role"] != "administrator":
             return render_template(
                 "login.html",
-                error="You are not registered as faculty or administrator. Contact your administrator for access.",
+                error="You are not registered as an administrator. Contact your administrator for access.",
+            ), 403
+
+        if login_mode == "faculty" and user["role"] != "faculty":
+            return render_template(
+                "login.html",
+                error="You are not registered as faculty. Contact your administrator for access.",
             ), 403
 
         session.clear()
