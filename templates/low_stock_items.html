@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}Low-Stock Items | Nursing Inventory System{% endblock %}
+
+{% block content %}
+<section>
+    <div class="page-header">
+        <div>
+            <h2>Low-Stock Items</h2>
+            <p>Items shown here are at or below their minimum quantity.</p>
+        </div>
+
+        <a class="button-link" href="{{ url_for('items') }}">All Items</a>
+    </div>
+
+    {% if items %}
+    <table>
+        <thead>
+            <tr>
+                <th>Barcode</th>
+                <th>Name</th>
+                <th>Room</th>
+                <th>Bin</th>
+                <th>Vendor</th>
+                <th>Quantity</th>
+                <th>Minimum</th>
+                <th>Needed</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in items %}
+            <tr>
+                <td>{{ item["barcode"] }}</td>
+                <td>{{ item["name"] }}</td>
+                <td>{{ item["room"] }}</td>
+                <td>{{ item["bin_location"] }}</td>
+                <td>{{ item["company"] or "Not set" }}</td>
+                <td>{{ item["quantity"] }}</td>
+                <td>{{ item["minimum_quantity"] }}</td>
+                <td>{{ item["minimum_quantity"] - item["quantity"] }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>No items are currently below their minimum quantity.</p>
+    {% endif %}
+</section>
+{% endblock %}

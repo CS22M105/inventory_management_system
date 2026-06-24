@@ -230,6 +230,25 @@ def items():
 
     return render_template("items.html", items=inventory_items)
 
+@app.route("/items/low-stock")
+def low_stock_items():
+    login_redirect = require_login()
+
+    if login_redirect is not None:
+        return login_redirect
+
+    db = get_db()
+    inventory_items = db.execute(
+        """
+        SELECT id, barcode, name, bin_location, room, company, quantity, minimum_quantity
+        FROM items
+        WHERE quantity <= minimum_quantity
+        ORDER BY quantity ASC, name
+        """
+    ).fetchall()
+
+    return render_template("low_stock_items.html", items=inventory_items)
+
 @app.route("/items/new", methods=["GET", "POST"])
 def item_new():
     manager_redirect = require_item_manager()

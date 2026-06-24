@@ -141,6 +141,15 @@ section h2 {
     margin: 0;
 }
 
+.dashboard-number-link {
+    color: inherit;
+    text-decoration: none;
+}
+
+.dashboard-number-link:hover {
+    text-decoration: underline;
+}
+
 .status-badge {
     background: #fee2e2;
     border: 1px solid #fca5a5;

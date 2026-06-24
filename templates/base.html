@@ -28,6 +28,7 @@
             <a href="{{ url_for('dashboard') }}">Admin Home</a>
             <a href="{{ url_for('admin_users') }}">Manage Users</a>
             <a href="{{ url_for('items') }}">All Items</a>
+            <a href="{{ url_for('low_stock_items') }}">Low Stock</a>
             <a href="{{ url_for('item_new') }}">Add New Item</a>
             <a href="{{ url_for('scan') }}">Scan Item</a>
             <a href="{{ url_for('transactions') }}">Transaction History</a>
@@ -36,6 +37,7 @@
             {% else %}
             <a href="{{ url_for('dashboard') }}">Home</a>
             <a href="{{ url_for('items') }}">Items</a>
+            <a href="{{ url_for('low_stock_items') }}">Low Stock</a>
             <a href="{{ url_for('scan') }}">Scan</a>
             <a href="{{ url_for('transactions') }}">Transactions</a>
             {% endif %}
