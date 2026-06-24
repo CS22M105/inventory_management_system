@@ -29,7 +29,8 @@
     <table>
         <thead>
             <tr>
-                <th>Date and Time</th>
+                <th>Date</th>
+                <th>Time</th>
                 <th>Action</th>
                 <th>Item</th>
                 <th>Quantity</th>
@@ -39,7 +40,8 @@
         <tbody>
             {% for transaction in recent_transactions %}
             <tr>
-                <td>{{ transaction["created_at"] }}</td>
+                <td>{{ transaction["transaction_date"] }}</td>
+                <td>{{ transaction["transaction_time"] }}</td>
                 <td>{{ transaction["transaction_type"] }}</td>
                 <td>{{ transaction["item_name"] }}</td>
                 <td>{{ transaction["quantity"] }}</td>
