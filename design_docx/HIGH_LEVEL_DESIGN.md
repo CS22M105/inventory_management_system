@@ -84,7 +84,7 @@ Web Browser
 Flask Web Application
   |
   v
-SQLite Database
+PostgreSQL Database
 ```
 
 ### Browser
@@ -110,9 +110,9 @@ It will:
 - Read data from the database.
 - Save changes to the database.
 
-### SQLite Database
+### PostgreSQL Database
 
-SQLite stores the system data in a local database file.
+PostgreSQL stores the system data in a relational database.
 
 It will store:
 
@@ -120,7 +120,7 @@ It will store:
 - Items.
 - Transactions.
 
-SQLite is a good starting choice because it is free, local, simple, and does not require a separate database server.
+PostgreSQL is a good choice because it is free and open source, reliable, handles multiple concurrent users, and supports both local development and production deployment.
 
 ## 6. Barcode Scanner Design
 
@@ -302,11 +302,11 @@ Why:
 
 Flask is lightweight, beginner-friendly, and good for building a small prototype quickly.
 
-### Decision 3: Use SQLite First
+### Decision 3: Use PostgreSQL
 
 Why:
 
-SQLite does not need a separate database server. This keeps setup simple and low-cost.
+PostgreSQL is free, open source, and reliable. It handles multiple concurrent users and works for both local development and production deployment.
 
 ### Decision 4: Treat Barcode Scanner as Keyboard Input
 
@@ -327,7 +327,7 @@ Both are needed.
 If the system grows, it can later move from:
 
 ```text
-Local Flask app + SQLite
+Local Flask app + PostgreSQL
 ```
 
 to:

@@ -2,7 +2,7 @@
 
 ## Summary
 
-Create a small Flask + SQLite web app skeleton inside `inventory/
+Create a small Flask + PostgreSQL web app skeleton inside `inventory/
 
 The skeleton will be runnable locally and will include placeholder screens for login, dashboard, item management, barcode entry, transaction history, and reports/export.
 
@@ -26,13 +26,13 @@ The skeleton will be runnable locally and will include placeholder screens for l
   - `inventory/static/css/styles.css`
   - `inventory/static/js/scan.js`
 
-- Add local data folder:
-  - `inventory/data/.gitkeep`
-  - Runtime database will be `inventory/data/inventory.db` and ignored by git.
+- Configure the database connection:
+  - The app reads a PostgreSQL connection string from the `DATABASE_URL` environment variable.
+  - Tables are created by running the `init-db` command, which executes `schema.sql`.
 
 ## Initial App Behavior
 
-- Use Flask with SQLite.
+- Use Flask with PostgreSQL.
 - Add routes:
   - `/` redirects to `/login` or `/dashboard`.
   - `/login` accepts an institutional ID.
@@ -44,7 +44,7 @@ The skeleton will be runnable locally and will include placeholder screens for l
   - `/transactions` lists transaction history.
   - `/reports/export` is a placeholder route for future CSV export.
 
-- Add SQLite tables:
+- Add PostgreSQL tables:
   - `users`
   - `items`
   - `transactions`

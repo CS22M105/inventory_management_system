@@ -122,7 +122,7 @@ Why Flask is a good choice for this project:
 - It is beginner-friendly.
 - It is lightweight.
 - It is good for small prototypes.
-- It works well with SQLite.
+- It works well with PostgreSQL.
 - It can run locally on a basic computer.
 - It does not require a complicated setup.
 
@@ -187,21 +187,21 @@ Flask runs the login page code
 Flask shows the login page in the browser
 ```
 
-### SQLite
+### PostgreSQL
 
-SQLite will be used as the first database.
+PostgreSQL will be used as the database.
 
-Why SQLite:
+Why PostgreSQL:
 
-- It is free.
-- It stores data in a simple file.
-- It does not require a separate database server.
-- It is good for small local prototypes.
-- It works well for a demo system.
+- It is free and open source.
+- It is reliable and stores data safely.
+- It handles multiple users at the same time.
+- It is suitable for both prototypes and production deployment.
+- It works well for a demo system and scales beyond it.
 
-How SQLite fits into the project:
+How PostgreSQL fits into the project:
 
-SQLite will store:
+PostgreSQL will store:
 
 - Users.
 - Inventory items.
@@ -239,8 +239,6 @@ inventory/
   schema.sql
   README.md
   PROJECT_DOCUMENTATION.md
-  data/
-    inventory.db
   templates/
     base.html
     login.html
@@ -291,17 +289,15 @@ It should include commands for:
 - Starting the app.
 - Logging in with demo users.
 
-### `data/`
+### Database connection
 
-This folder will store local database files.
-
-The database file will likely be:
+The app connects to a PostgreSQL database using a connection string provided by the `DATABASE_URL` environment variable, for example:
 
 ```text
-data/inventory.db
+postgresql://localhost/inventory_management_system
 ```
 
-This file will be created by the app when the database is initialized.
+The database tables are created by running the `init-db` command, which executes `schema.sql` against PostgreSQL.
 
 ### `templates/`
 

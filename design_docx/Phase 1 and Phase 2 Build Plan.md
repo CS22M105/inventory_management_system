@@ -8,7 +8,7 @@ The new file will break the project into small, trackable tasks for:
 - **Phase 1: Requirements and Design** from June 11-16, 2026.
 - **Phase 2: Prototype Setup** from June 17-23, 2026.
 
-The selected prototype direction is a **Python web app with SQLite**, using a simple local-first architecture suitable for low-cost hardware and a July 20 demo.
+The selected prototype direction is a **Python web app with PostgreSQL**, using a simple architecture suitable for low-cost hardware and a July 20 demo.
 
 ## Key Changes
 
@@ -30,7 +30,7 @@ The selected prototype direction is a **Python web app with SQLite**, using a si
 
 - Phase 2 content will plan the prototype foundation:
   - Python web app scaffold.
-  - SQLite database.
+  - PostgreSQL database.
   - Basic local login by user ID.
   - Inventory item table.
   - Add-item form.
@@ -90,7 +90,7 @@ Phase 1 checks:
 
 Phase 2 checks:
 - App starts locally.
-- SQLite database initializes successfully.
+- PostgreSQL database initializes successfully.
 - A sample user can log in with an ID.
 - A new item can be created with a barcode.
 - Inventory list displays saved items.
@@ -100,7 +100,7 @@ Phase 2 checks:
 
 ## Assumptions
 
-- The first prototype will be a local Python web app using SQLite.
+- The first prototype will be a Python web app using PostgreSQL.
 - Barcode scanner input will be treated like keyboard text input for the MVP.
 - CSV/Excel export will be included as a simple report feature before advanced analytics.
 - Authentication will start with ID-based local login, not institutional single sign-on.

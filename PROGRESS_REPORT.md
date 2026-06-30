@@ -13,7 +13,7 @@ The project has moved from planning into a working Flask prototype.
 The system now has:
 
 - A Flask application structure.
-- A SQLite database.
+- A PostgreSQL database.
 - Registered user login.
 - Administrator-only user management.
 - Inventory item creation.
@@ -72,9 +72,9 @@ Completed:
   ```text
   schema.sql
   ```
-- Created SQLite database:
+- Created PostgreSQL database:
   ```text
-  data/inventory.db
+  inventory_management_system
   ```
 - Added core database tables:
   ```text

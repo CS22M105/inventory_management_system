@@ -25,7 +25,7 @@ flowchart LR
     Admin[Administrator]
     Scanner[Barcode Scanner]
     System[Nursing Inventory System]
-    Database[(SQLite Database)]
+    Database[(PostgreSQL Database)]
     Reports[CSV or Excel Reports]
 
     Student --> System
@@ -38,7 +38,7 @@ flowchart LR
 
 Why this diagram matters:
 
-It shows who or what interacts with the system. The main outside actors are users and the barcode scanner. The system stores data in SQLite and later produces reports.
+It shows who or what interacts with the system. The main outside actors are users and the barcode scanner. The system stores data in PostgreSQL and later produces reports.
 
 ## 2. High-Level Architecture Diagram
 
@@ -50,13 +50,13 @@ flowchart TB
     Flask[Flask Web Application]
     Templates[HTML Templates]
     Static[CSS and JavaScript Files]
-    SQLite[(SQLite Database)]
+    PostgreSQL[(PostgreSQL Database)]
 
     Browser --> Flask
     Flask --> Templates
     Flask --> Static
-    Flask --> SQLite
-    SQLite --> Flask
+    Flask --> PostgreSQL
+    PostgreSQL --> Flask
     Flask --> Browser
 ```
 
@@ -181,7 +181,7 @@ sequenceDiagram
     actor User
     participant Browser
     participant FlaskApp as Flask App
-    participant Database as SQLite Database
+    participant Database as PostgreSQL Database
 
     User->>Browser: Enter institutional ID
     Browser->>FlaskApp: Submit login form
@@ -205,7 +205,7 @@ sequenceDiagram
     actor Staff as Faculty or Staff
     participant Browser
     participant FlaskApp as Flask App
-    participant Database as SQLite Database
+    participant Database as PostgreSQL Database
 
     Staff->>Browser: Open Add Item page
     Browser->>FlaskApp: Request item form
@@ -233,7 +233,7 @@ sequenceDiagram
     participant Scanner as Barcode Scanner
     participant Browser
     participant FlaskApp as Flask App
-    participant Database as SQLite Database
+    participant Database as PostgreSQL Database
 
     User->>Browser: Click barcode input
     User->>Scanner: Scan item barcode
@@ -262,7 +262,7 @@ sequenceDiagram
     participant Scanner as Barcode Scanner
     participant Browser
     participant FlaskApp as Flask App
-    participant Database as SQLite Database
+    participant Database as PostgreSQL Database
 
     Staff->>Browser: Open scan or add stock page
     Staff->>Scanner: Scan item barcode
@@ -323,7 +323,7 @@ flowchart LR
     Device[Low-Cost Laptop or Desktop]
     Browser[Browser on Same Device]
     App[Local Flask App]
-    DB[(Local SQLite File)]
+    DB[(PostgreSQL Database)]
     Scanner[USB Barcode Scanner]
 
     Scanner --> Browser

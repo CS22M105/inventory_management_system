@@ -193,7 +193,7 @@ Recommended software structure:
 
 - **Frontend:** Simple web interface for login, scanning, item management, inventory table, and reports.
 - **Backend:** Application server that handles user actions, barcode lookups, inventory updates, and reports.
-- **Database:** SQLite for a low-cost local prototype, with the option to upgrade to PostgreSQL or MySQL later.
+- **Database:** PostgreSQL, a free and open-source relational database suitable for both local prototyping and production deployment.
 - **Barcode scanner:** USB barcode scanner acting like a keyboard input, or a camera-based scanner for tablets.
 - **Export:** CSV and Excel-compatible reports.
 
@@ -291,7 +291,7 @@ Estimated hardware options:
 | Computer or tablet | Existing device if available |
 | USB barcode scanner | Approximately $20-$50 |
 | Barcode labels | Standard printable labels or label printer |
-| Database | SQLite, no license cost |
+| Database | PostgreSQL, free and open source, no license cost |
 | Software hosting | Local machine or internal network |
 
 ## 15. Risks and Mitigation
