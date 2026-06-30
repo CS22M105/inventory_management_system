@@ -49,6 +49,7 @@
             id="lab_instructor"
             name="lab_instructor"
             placeholder="Example: Professor Smith"
+            required
         >
 
         <label for="topic_of_day">Topic of the Day</label>
@@ -57,6 +58,7 @@
             id="topic_of_day"
             name="topic_of_day"
             placeholder="Example: Wound Care Simulation"
+            required
         >
 
         <label for="notes">Notes</label>
@@ -64,10 +66,86 @@
             id="notes"
             name="notes"
             rows="4"
-            placeholder="Optional reason or class/lab note"
+            placeholder="Reason or class/lab note"
+            required
         ></textarea>
 
         <button type="submit">Submit Inventory Action</button>
     </form>
 </section>
+
+<script>
+    // Barcode scanners are keyboard-wedge devices: they type the barcode and
+    // then send an Enter keystroke. Because the barcode box is autofocused,
+    // that Enter would submit the form before the rest of the fields are
+    // filled. Intercept Enter in the barcode field so a scan never submits an
+    // incomplete transaction. Instead of moving focus away, highlight every
+    // still-empty required field so the user can see exactly what is missing
+    // while keeping their place in the barcode box.
+    document.addEventListener("DOMContentLoaded", function () {
+        var form = document.querySelector("form");
+        var barcodeInput = document.getElementById("barcode");
+        var requiredFields = [
+            "barcode",
+            "transaction_type",
+            "quantity",
+            "lab_instructor",
+            "topic_of_day",
+            "notes",
+        ];
+
+        function highlightEmptyFields() {
+            var firstEmpty = null;
+            requiredFields.forEach(function (fieldId) {
+                var field = document.getElementById(fieldId);
+                if (!field) {
+                    return;
+                }
+                if (field.value.trim() === "") {
+                    field.classList.add("field-error");
+                    if (firstEmpty === null) {
+                        firstEmpty = field;
+                    }
+                } else {
+                    field.classList.remove("field-error");
+                }
+            });
+            return firstEmpty;
+        }
+
+        if (barcodeInput) {
+            barcodeInput.addEventListener("keydown", function (event) {
+                if (event.key === "Enter") {
+                    event.preventDefault();
+                    highlightEmptyFields();
+                }
+            });
+        }
+
+        // Clear a field's highlight as soon as the user fills it in.
+        requiredFields.forEach(function (fieldId) {
+            var field = document.getElementById(fieldId);
+            if (!field) {
+                return;
+            }
+            field.addEventListener("input", function () {
+                if (field.value.trim() !== "") {
+                    field.classList.remove("field-error");
+                }
+            });
+            field.addEventListener("change", function () {
+                if (field.value.trim() !== "") {
+                    field.classList.remove("field-error");
+                }
+            });
+        });
+
+        // On a real submit attempt, highlight anything still empty too.
+        if (form) {
+            form.addEventListener("submit", function () {
+                highlightEmptyFields();
+            });
+        }
+    });
+</script>
 {% endblock %}

@@ -566,3 +566,109 @@ Administrator account: permanent and protected
 ```
 
 This update improves security and role clarity before moving the project toward barcode scanner testing and cloud deployment.
+
+## Scan Form Fix: Prevent Incomplete Transactions - June 30, 2026
+
+### 1. Problem Addressed
+
+What was happening:
+
+- On the Scan Item page, pressing Enter could submit the form before all the fields were filled in.
+- This was especially easy to trigger with a barcode scanner. Most scanners type the barcode and then automatically send an Enter keystroke. Because the barcode box is focused when the page loads, that Enter submitted the form right away.
+- When this happened, a transaction row was still recorded and the item quantity was changed, even though the Lab Instructor, Topic of the Day, and Notes were empty.
+
+Why it needed to change:
+
+- A transaction should only be recorded when all of its entries are filled in.
+- Incomplete rows in the transaction history make the audit log less trustworthy and harder to read.
+- The accidental Enter submit caused confusion during scanning.
+
+### 2. What Was Changed
+
+Where: `templates/scan.html`
+
+- The Lab Instructor, Topic of the Day, and Notes fields are now marked as required, so the browser will not submit the form until they are filled in.
+- A small script was added at the bottom of the page. When the user presses Enter inside the barcode box, the form no longer submits. Instead, focus moves to the Action dropdown so the user can continue filling out the rest of the form. This is the standard fix for barcode scanners that send an Enter keystroke after the barcode.
+
+Where: `app.py` (the `/scan` POST handler)
+
+- Server-side checks were added so the application refuses to record a transaction unless the Lab Instructor, Topic of the Day, and Notes fields are all filled in.
+- These checks run before any change is made to the item quantity or the transactions table. If a required field is missing, the page shows a clear error message and nothing is saved.
+
+How the two layers work together:
+
+- The form (browser) is the first line of defense and gives the user immediate feedback.
+- The server checks are the guarantee. Even if the browser checks are bypassed (for example by a stray Enter, an older browser, or disabled JavaScript), no transaction row is written until every entry is filled.
+
+### 3. Why It Was Done This Way
+
+- Client-side checks alone can always be bypassed, so the same rules are enforced on the server to fully protect the transaction history.
+- Moving focus on Enter (instead of just blocking it) keeps the scanning workflow fast: scan the barcode, then continue straight into the rest of the form.
+
+### 4. Verification Performed
+
+The following behavior was tested:
+
+- Scanning a barcode (which sends Enter) no longer submits the form; focus moves to the Action dropdown.
+- Submitting with an empty Lab Instructor, Topic of the Day, or Notes field is blocked and shows an error.
+- No transaction row is created and no item quantity changes when a required field is missing.
+- A fully filled form still records the transaction and updates the quantity as before.
+
+### Current Result
+
+Transactions on the Scan Item page are now only recorded when every entry is filled in, and accidental Enter key presses (including from barcode scanners) no longer create incomplete records.
+
+## Scan Form Update: Highlight Empty Fields on Enter - June 30, 2026
+
+### 1. Problem Addressed
+
+What was happening:
+
+- The previous Enter-key fix on the Scan Item page worked by moving focus to the Action dropdown whenever the user pressed Enter inside the barcode box.
+- Jumping focus to the dropdown took the user away from where they were and only pointed them at one field, even though several other entries (Quantity, Lab Instructor, Topic of the Day, Notes) could still be empty.
+- The user could not see, at a glance, everything that still needed to be filled in before the form could be submitted.
+
+Why it needed to change:
+
+- Pulling focus to the dropdown was disruptive and did not communicate the full set of missing entries.
+- It is clearer and less jarring to show the user every empty required field at once and let them stay where they are.
+
+### 2. What Was Changed
+
+Where: `templates/scan.html`
+
+- The barcode Enter handler no longer moves focus to the Action dropdown. Instead, pressing Enter in the barcode box now highlights every still-empty required field (Barcode, Action, Quantity, Lab Instructor, Topic of the Day, and Notes) in place, without changing focus.
+- Each highlighted field clears its highlight automatically as soon as the user fills it in (on input or change).
+- The same highlight runs on a real submit attempt, so any field left empty is marked.
+
+Where: `static/css/styles.css`
+
+- Added a `.field-error` class that gives an empty required field a red border, a light red background, and a red focus outline so missing entries are easy to spot.
+
+Where: `app.py` (the `/scan` POST handler)
+
+- No new change in this update. The server-side checks that reject a transaction when Lab Instructor, Topic of the Day, or Notes is empty remain in place and continue to act as the final guarantee.
+
+How the layers work together:
+
+- The browser highlight is immediate visual feedback that points out every missing entry without moving the user's focus.
+- The server checks remain the guarantee: even if the browser checks are bypassed (stray Enter, old browser, or disabled JavaScript), no transaction row is written until every required entry is filled.
+
+### 3. Why It Was Done This Way
+
+- Highlighting all empty fields at once gives the user a complete picture of what is missing, instead of nudging them toward a single field.
+- Keeping focus in the barcode box avoids the disruptive focus jump while still blocking the accidental Enter submit.
+- Clearing the highlight on input keeps the feedback honest, so a field stops looking like an error the moment it is filled.
+
+### 4. Verification Performed
+
+The following behavior was tested:
+
+- Pressing Enter in the barcode box no longer submits the form and no longer moves focus to the Action dropdown; instead, all empty required fields are highlighted in red.
+- Filling in a highlighted field removes its highlight immediately.
+- Attempting to submit with any empty required field highlights the missing fields, and the server still blocks the transaction.
+- A fully filled form still records the transaction and updates the quantity as before.
+
+### Current Result
+
+Pressing Enter on the Scan Item page now clearly highlights every empty required field in place rather than moving focus to the dropdown, making it obvious what still needs to be filled in while the server continues to guarantee that no incomplete transaction is ever recorded.

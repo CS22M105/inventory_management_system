@@ -341,6 +341,12 @@ textarea:focus {
     outline: 3px solid rgba(153, 27, 27, 0.16);
 }
 
+.field-error {
+    border-color: #dc2626;
+    background: #fef2f2;
+    outline: 3px solid rgba(220, 38, 38, 0.18);
+}
+
 button {
     background: #991b1b;
     border: 0;

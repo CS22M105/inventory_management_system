@@ -479,6 +479,18 @@ def scan():
         if quantity <= 0:
             return render_template("scan.html", error="Quantity must be greater than zero."), 400
 
+        # Every entry must be filled before a transaction is recorded. The form
+        # marks these required, but an accidental Enter (e.g. from a barcode
+        # scanner) can bypass client-side checks, so enforce it here too.
+        if not lab_instructor:
+            return render_template("scan.html", error="Lab Instructor is required."), 400
+
+        if not topic_of_day:
+            return render_template("scan.html", error="Topic of the Day is required."), 400
+
+        if not notes:
+            return render_template("scan.html", error="Notes are required."), 400
+
         db = get_db()
         ensure_transaction_columns(db)
         item = db.execute(
