@@ -24,7 +24,6 @@ The skeleton will be runnable locally and will include placeholder screens for l
   - `inventory/templates/scan.html`
   - `inventory/templates/transactions.html`
   - `inventory/static/css/styles.css`
-  - `inventory/static/js/scan.js`
 
 - Configure the database connection:
   - The app reads a PostgreSQL connection string from the `DATABASE_URL` environment variable.

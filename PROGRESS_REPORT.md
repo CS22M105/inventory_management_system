@@ -36,14 +36,12 @@ Completed:
   ```
 - Installed Flask in the project virtual environment:
   ```text
-  invent/
+  .venv/
   ```
 - Created project folders:
   ```text
   templates/
   static/css/
-  static/js/
-  data/
   design_docx/
   ```
 - Created `.gitignore` to prevent local-only files from being pushed to GitHub.
