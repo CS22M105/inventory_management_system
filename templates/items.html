@@ -42,8 +42,8 @@
                 <td>
                     <span class="action-group">
                         <a class="table-action-link" href="{{ url_for('item_detail', barcode=item['barcode']) }}">View</a>
-                        <a class="table-action-link" href="{{ url_for('item_label', barcode=item['barcode']) }}">Print Label</a>
                         {% if session.get("user_role") in ["faculty", "administrator"] %}
+                        <a class="table-action-link" href="{{ url_for('item_label', barcode=item['barcode']) }}">Print Label</a>
                         <a class="table-action-link" href="{{ url_for('item_edit', item_id=item['id']) }}">Edit</a>
                         {% endif %}
                     </span>

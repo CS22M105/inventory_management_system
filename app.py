@@ -383,7 +383,7 @@ def item_detail(barcode):
 
 @app.route("/items/<barcode>/qr.png")
 def item_qr_png(barcode):
-    login_redirect = require_login()
+    login_redirect = require_item_manager()
 
     if login_redirect is not None:
         return login_redirect
@@ -421,7 +421,7 @@ def item_qr_png(barcode):
 
 @app.route("/items/<barcode>/label")
 def item_label(barcode):
-    login_redirect = require_login()
+    login_redirect = require_item_manager()
 
     if login_redirect is not None:
         return login_redirect
