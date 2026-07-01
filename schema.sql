@@ -1,6 +1,7 @@
 DROP TABLE IF EXISTS transactions;
 DROP TABLE IF EXISTS items;
 DROP TABLE IF EXISTS users;
+DROP SEQUENCE IF EXISTS item_barcode_number_seq;
 
 CREATE TABLE users (
     id SERIAL PRIMARY KEY,
@@ -24,6 +25,8 @@ CREATE TABLE items (
     expiration_date TEXT DEFAULT '00/00/0000',
     notes TEXT
 );
+
+CREATE SEQUENCE item_barcode_number_seq START WITH 1;
 
 CREATE TABLE transactions (
     id SERIAL PRIMARY KEY,

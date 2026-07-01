@@ -719,3 +719,43 @@ Where: `app.py`
 ### Current Result
 
 The QR code library and its configuration are now installed and available in the project. `requirements.txt`, `.env.example`, and `app.py` are ready for the next steps, and none of the existing login, item, scan, transaction, or admin functionality was changed or affected by this step.
+
+## Update: July 1, 2026 — QR Code Integration Step 2 (Barcode Sequence)
+
+This update covers Step 2 of `QR_CODE_SYSTEM_INTEGRATION_PLAN.md`: "Add Barcode Sequence." It adds a PostgreSQL sequence that will be used later to generate unique internal item codes (for example, `KATZ-NURS-000014`). No barcode is generated yet and no existing behavior changed; this step only creates the sequence and makes sure it exists safely on both new and existing databases.
+
+### 1. What Was Changed
+
+Where: `schema.sql`
+
+- Added `CREATE SEQUENCE item_barcode_number_seq START WITH 1;` immediately after the `items` table. This is the counter that future item-code generation will draw from.
+- Added `DROP SEQUENCE IF EXISTS item_barcode_number_seq;` alongside the existing `DROP TABLE IF EXISTS ...` statements at the top of the file, so re-running `init-db` does not fail with an "already exists" error.
+
+Where: `app.py`
+
+- Added a new helper, `ensure_barcode_sequence(db)`, next to the existing `ensure_transaction_columns(db)` helper. It runs `CREATE SEQUENCE IF NOT EXISTS item_barcode_number_seq START WITH 1` and commits.
+- Called `ensure_barcode_sequence(db)` inside the `init-db` CLI command (after loading `schema.sql`) so the sequence is guaranteed to exist even on a database that was created before this feature.
+
+### 2. How It Was Done
+
+- The plain `CREATE SEQUENCE ... START WITH 1` lives in `schema.sql` so a fresh database gets the sequence when the schema is first loaded. The matching `DROP SEQUENCE IF EXISTS` keeps `init-db` idempotent, following the same drop-then-create pattern already used for the tables.
+- The `IF NOT EXISTS` variant lives in `app.py` as `ensure_barcode_sequence(db)`. This mirrors the existing `ensure_transaction_columns(db)` runtime-migration pattern, so an already-running database that predates this feature can gain the sequence without a destructive re-initialization.
+- `ensure_barcode_sequence(db)` is wired into `init-db` for now. When Step 3 adds automatic barcode generation, the same helper can be called right before the first `nextval(...)` so the sequence is always present at the moment it is needed.
+- `python -m py_compile app.py` was run to confirm the file still compiles.
+
+### 3. Why It Was Done This Way
+
+- A PostgreSQL sequence is used instead of `COUNT(*) + 1` because the database guarantees each `nextval(...)` returns a unique, ever-increasing number even when two users add items at the same time. `COUNT(*) + 1` can hand out the same number twice under concurrent inserts and would produce duplicate barcodes.
+- The sequence is defined in both `schema.sql` (plain create) and `app.py` (`IF NOT EXISTS`) to cover both cases the plan calls out: a brand-new database built from the schema, and an existing database that must be upgraded safely at runtime without dropping data.
+- Adding `DROP SEQUENCE IF EXISTS` was a deliberate safety choice so that `flask --app app init-db` remains safe to re-run, exactly like it already is for the tables.
+- The change is intentionally isolated: the sequence exists but nothing consumes it yet, so no current login, item, scan, transaction, admin, or CSV-export behavior is affected. Barcode generation is deferred to Step 3.
+
+### 4. Verification Performed
+
+- Ran `python -m py_compile app.py`; it compiled with no errors.
+- Reviewed `schema.sql` to confirm the create statement follows the `items` table and the matching drop is grouped with the other `DROP ... IF EXISTS` statements.
+- Confirmed the new `ensure_barcode_sequence(db)` helper uses `CREATE SEQUENCE IF NOT EXISTS` and is invoked from the `init-db` command.
+
+### Current Result
+
+The database now has an `item_barcode_number_seq` sequence that will feed automatic internal item codes in later steps. New databases get it from `schema.sql`, existing databases get it from the `ensure_barcode_sequence(db)` runtime-safety helper, and re-running `init-db` is still safe. No existing functionality was changed by this step.

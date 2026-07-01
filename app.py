@@ -88,6 +88,12 @@ def ensure_transaction_columns(db):
     db.execute("ALTER TABLE transactions ALTER COLUMN transaction_time SET NOT NULL")
     db.commit()
 
+def ensure_barcode_sequence(db):
+    # Runtime safety: create the internal item-code sequence if a database
+    # created before this feature does not have it yet. Safe to call repeatedly.
+    db.execute("CREATE SEQUENCE IF NOT EXISTS item_barcode_number_seq START WITH 1")
+    db.commit()
+
 def require_login():
     if "user_id" not in session:
         return redirect(url_for("login"))
@@ -185,7 +191,10 @@ def init_db_command():
         db.execute(schema_file.read())
 
     db.commit()
-    
+
+    # Runtime safety for databases initialized before this feature existed.
+    ensure_barcode_sequence(db)
+
     click.echo("Initialized the PostgreSQL inventory database.")
 
 @app.route("/")
