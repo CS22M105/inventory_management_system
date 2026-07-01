@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}{{ item["name"] }} | Nursing Inventory System{% endblock %}
+
+{% block content %}
+<section>
+    <div class="page-header">
+        <div>
+            <h2>{{ item["name"] }}</h2>
+            <p>Internal Code: {{ item["barcode"] }}</p>
+        </div>
+
+        {% if item["quantity"] <= item["minimum_quantity"] %}
+        <span class="status-badge">Low stock</span>
+        {% endif %}
+    </div>
+
+    <table>
+        <tbody>
+            <tr>
+                <th>Item Name</th>
+                <td>{{ item["name"] }}</td>
+            </tr>
+            <tr>
+                <th>Internal Code</th>
+                <td>{{ item["barcode"] }}</td>
+            </tr>
+            <tr>
+                <th>Vendor</th>
+                <td>{{ item["company"] or "Not set" }}</td>
+            </tr>
+            <tr>
+                <th>Room</th>
+                <td>{{ item["room"] }}</td>
+            </tr>
+            <tr>
+                <th>Bin</th>
+                <td>{{ item["bin_location"] }}</td>
+            </tr>
+            <tr>
+                <th>General Location</th>
+                <td>{{ item["location"] or "Not set" }}</td>
+            </tr>
+            <tr>
+                <th>Current Quantity</th>
+                <td>{{ item["quantity"] }}</td>
+            </tr>
+            <tr>
+                <th>Minimum Quantity</th>
+                <td>{{ item["minimum_quantity"] }}</td>
+            </tr>
+            <tr>
+                <th>Expiration Date</th>
+                <td>{{ item["expiration_date"] or "Not set" }}</td>
+            </tr>
+            <tr>
+                <th>Notes</th>
+                <td>{{ item["notes"] or "None" }}</td>
+            </tr>
+            <tr>
+                <th>Stock Status</th>
+                <td>
+                    {% if item["quantity"] <= item["minimum_quantity"] %}
+                    At or below minimum quantity
+                    {% else %}
+                    In stock
+                    {% endif %}
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="action-group" style="margin-top: 24px;">
+        <a class="button-link" href="{{ url_for('scan') }}">Stock Action</a>
+        {% if session.get("user_role") in ["faculty", "administrator"] %}
+        <a class="button-link" href="{{ url_for('item_edit', item_id=item['id']) }}">Edit Item</a>
+        {% endif %}
+        <a class="button-link secondary-link" href="{{ url_for('items') }}">All Items</a>
+    </div>
+</section>
+{% endblock %}

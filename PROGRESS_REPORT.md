@@ -805,3 +805,48 @@ Where: `templates/item_new.html`
 ### Current Result
 
 Staff can now add an item without typing a barcode and the system assigns the next `KATZ-NURS-######` code automatically, while manually entered barcodes continue to work exactly as before. Editing behavior, duplicate protection, and all other login, item, scan, transaction, admin, and CSV-export functionality are unchanged.
+
+## Update: July 1, 2026 — QR Code Integration Step 4 (Item Detail Page)
+
+This update covers Step 4 of `QR_CODE_SYSTEM_INTEGRATION_PLAN.md`: "Add Item Detail Page." There is now a read-only page at `/items/<barcode>` that shows every stored field for a single item, plus a low-stock status. It is reachable from a new "View" link on the All Items table. Any logged-in user (including students) can view it; only faculty/administrators see the Edit button. This page is the destination that the upcoming QR labels will point to.
+
+### 1. What Was Changed
+
+Where: `app.py`
+
+- Added a new route and view function `item_detail(barcode)` mapped to `/items/<barcode>`. It requires login (via the existing `require_login()` guard), looks up a single item by its `barcode`, and renders the new `item_detail.html` template.
+- If no item matches the barcode, it calls `abort(404, description="Not recognized")`, so an unknown code returns a 404 instead of a blank or error page.
+
+Where: `templates/item_detail.html` (new file)
+
+- Displays all item fields: name, internal code (barcode), vendor, room, bin, general location, current quantity, minimum quantity, expiration date, and notes, along with a plain-language "Stock Status" row.
+- Shows a "Low stock" badge in the page header when `quantity <= minimum_quantity`.
+- Provides action buttons: "Stock Action" (links to the existing `/scan` page), "Edit Item" (faculty/administrator only, links to the existing edit page), and "All Items".
+
+Where: `templates/items.html`
+
+- The Action column is now always shown (previously it only appeared for faculty/administrators).
+- Every row now has a "View" link (visible to all logged-in users, including students) pointing to the item's detail page, with the "Edit" link still shown only to faculty/administrators.
+
+### 2. How It Was Done
+
+- The route uses a string `<barcode>` converter rather than the numeric `<int:item_id>` used by the edit route, because QR codes and scanners work with the human-readable barcode/internal code, not the internal database id. The detail lookup therefore queries `WHERE barcode = %s`.
+- Flask/Werkzeug matches the more specific static routes (`/items/new`, `/items/low-stock`) and the `/items/<int:item_id>/edit` route ahead of the generic `/items/<barcode>` route, so adding this route does not shadow or break any existing item URLs.
+- The template reuses existing CSS classes only (`page-header`, `status-badge`, `table`, `action-group`, `button-link`, `secondary-link`), so no stylesheet changes were needed for this step.
+- The "View" link is built with `url_for('item_detail', barcode=item['barcode'])`, keeping URL generation consistent with the rest of the app instead of hard-coding paths.
+
+### 3. Why It Was Done This Way
+
+- The plan sequences the detail page before QR label/PNG generation on purpose: QR codes need a useful, verified destination, and this page confirms that looking an item up by its code works end to end.
+- Access is intentionally read-only for everyone and edit-only for faculty/administrators, matching the plan's access rule and the existing role model (students can view inventory but not change item records).
+- The "Stock Action" button points to the existing `/scan` page for now because the dedicated per-item stock route (`/items/<barcode>/stock`) and the printable label route (`/items/<barcode>/label`) are scheduled for later steps (Steps 6-7). Linking only to routes that already exist keeps this step self-contained and avoids `url_for` build errors; those buttons can be repointed when the later routes are added.
+
+### 4. Verification Performed
+
+- Ran `python -m py_compile app.py`; it compiled with no errors.
+- Confirmed via the code that a valid barcode (e.g. a seeded/added item) renders the detail page and an unknown barcode triggers `abort(404, description="Not recognized")`.
+- Confirmed the All Items "View" link is present for all roles and that the "Edit" link/button on both the list and the detail page remain gated to faculty/administrators.
+
+### Current Result
+
+Users can open any item's full details from the All Items list, students included, while editing stays restricted to faculty/administrators. The new `/items/<barcode>` page gives QR labels a working destination in the next steps, and all existing login, item, scan, transaction, admin, and CSV-export behavior is unchanged.

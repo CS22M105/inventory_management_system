@@ -347,6 +347,39 @@ def low_stock_items():
 
     return render_template("low_stock_items.html", items=inventory_items)
 
+@app.route("/items/<barcode>")
+def item_detail(barcode):
+    login_redirect = require_login()
+
+    if login_redirect is not None:
+        return login_redirect
+
+    db = get_db()
+    item = db.execute(
+        """
+        SELECT
+            id,
+            barcode,
+            name,
+            bin_location,
+            room,
+            company,
+            quantity,
+            minimum_quantity,
+            location,
+            expiration_date,
+            notes
+        FROM items
+        WHERE barcode = %s
+        """,
+        (barcode,),
+    ).fetchone()
+
+    if item is None:
+        abort(404, description="Not recognized")
+
+    return render_template("item_detail.html", item=item)
+
 @app.route("/items/new", methods=["GET", "POST"])
 def item_new():
     manager_redirect = require_item_manager()

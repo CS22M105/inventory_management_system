@@ -26,9 +26,7 @@
                 <th>Vendor</th>
                 <th>Quantity</th>
                 <th>Minimum</th>
-                {% if session.get("user_role") in ["faculty", "administrator"] %}
                 <th>Action</th>
-                {% endif %}
             </tr>
         </thead>
         <tbody>
@@ -41,11 +39,14 @@
                 <td>{{ item["company"] or "Not set" }}</td>
                 <td>{{ item["quantity"] }}</td>
                 <td>{{ item["minimum_quantity"] }}</td>
-                {% if session.get("user_role") in ["faculty", "administrator"] %}
                 <td>
-                    <a class="table-action-link" href="{{ url_for('item_edit', item_id=item['id']) }}">Edit</a>
+                    <span class="action-group">
+                        <a class="table-action-link" href="{{ url_for('item_detail', barcode=item['barcode']) }}">View</a>
+                        {% if session.get("user_role") in ["faculty", "administrator"] %}
+                        <a class="table-action-link" href="{{ url_for('item_edit', item_id=item['id']) }}">Edit</a>
+                        {% endif %}
+                    </span>
                 </td>
-                {% endif %}
             </tr>
             {% endfor %}
         </tbody>
