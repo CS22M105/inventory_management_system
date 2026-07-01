@@ -15,6 +15,11 @@ ELEVATED_LOGIN_MODES = {"admin", "faculty"}
 SCHEMA = BASE_DIR / "schema.sql"
 APP_ENV = os.environ.get("APP_ENV", "development").lower()
 SECRET_KEY = os.environ.get("SECRET_KEY")
+# Public base URL used when building QR-code links. If unset, the app falls
+# back to the current request host at runtime (see later QR routes).
+APP_BASE_URL = os.environ.get("APP_BASE_URL")
+# Prefix for auto-generated internal item codes (e.g. KATZ-NURS-000014).
+BARCODE_PREFIX = os.environ.get("BARCODE_PREFIX", "KATZ-NURS")
 
 app = Flask(__name__)
 if APP_ENV == "production" and not SECRET_KEY:

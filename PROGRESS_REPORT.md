@@ -672,3 +672,50 @@ The following behavior was tested:
 ### Current Result
 
 Pressing Enter on the Scan Item page now clearly highlights every empty required field in place rather than moving focus to the dropdown, making it obvious what still needs to be filled in while the server continues to guarantee that no incomplete transaction is ever recorded.
+
+## Update: July 1, 2026 — QR Code Integration Step 1 (Dependencies and Configuration)
+
+This update starts the QR code system described in `QR_CODE_SYSTEM_INTEGRATION_PLAN.md`. It covers only Step 1 of the recommended implementation order: "Add Dependencies And Config." No routes, database changes, or templates were touched in this step. The goal was to put the QR library and its configuration values in place safely, without changing any existing behavior.
+
+### 1. What Was Changed
+
+Where: `requirements.txt`
+
+- Added the `qrcode[pil]>=7.4,<8.0` dependency. The `[pil]` extra pulls in Pillow so the library can render QR codes as PNG images later.
+
+Where: `.env.example`
+
+- Added `APP_BASE_URL=http://127.0.0.1:5001`. This is the public base URL that future QR links will be built from.
+- Added `BARCODE_PREFIX=KATZ-NURS`. This is the prefix for auto-generated internal item codes (for example, `KATZ-NURS-000014`).
+
+Where: `app.py`
+
+- Added two configuration variables read from the environment, next to the existing `APP_ENV` and `SECRET_KEY` config:
+  - `APP_BASE_URL = os.environ.get("APP_BASE_URL")` — left as `None` when unset so later QR routes can fall back to the current request host.
+  - `BARCODE_PREFIX = os.environ.get("BARCODE_PREFIX", "KATZ-NURS")` — defaults to `KATZ-NURS` when unset.
+
+### 2. How It Was Done
+
+- The dependency was added to `requirements.txt` and installed into the existing project virtual environment with `pip install -r requirements.txt`. This installed `qrcode 7.4.2` along with `pillow`, `pypng`, and `typing-extensions`.
+- The new environment variables were added to `.env.example` only. Real secrets and machine-specific values still live in the untracked `.env` file; `.env.example` documents the expected keys for anyone setting up the project.
+- The two config values in `app.py` follow the same `os.environ.get(...)` pattern already used for `DATABASE_URL`, `APP_ENV`, and `SECRET_KEY`, so configuration stays consistent and centralized.
+- No existing imports, routes, templates, or database objects were modified. The QR library is installed and configured but not yet used anywhere, keeping this step isolated and low-risk.
+
+### 3. Why It Was Done This Way
+
+- Following the plan's recommended order (config first) keeps each change small and easy to verify, and lets the QR feature be built up in reviewable pieces.
+- `APP_BASE_URL` is required because a QR code that encodes `127.0.0.1` only works on the same computer. A phone camera needs a real network or cloud URL, so the base URL must be configurable per environment (local, local network, and production) rather than hard-coded.
+- Leaving `APP_BASE_URL` as `None` by default (instead of forcing a value) lets the app fall back to the live request host during local development, so the feature works out of the box without extra setup.
+- `BARCODE_PREFIX` is configurable so the university can change the code scheme later (for example, `YU-KATZ-NURS`) without editing application code.
+- Keeping the value in `.env.example` documents the setting without committing any environment-specific value into version control.
+
+### 4. Verification Performed
+
+- Installed dependencies with `pip install -r requirements.txt`; `qrcode 7.4.2` and Pillow installed successfully into `.venv/`.
+- Ran `python -m py_compile app.py` (the plan's Step 1 verification command); it compiled with no errors.
+- Confirmed the library works at runtime: `import qrcode` succeeds and `qrcode.make("test")` produces an image object.
+- Imported the app module and confirmed the new config loads correctly: `BARCODE_PREFIX` reads as `KATZ-NURS`, and `APP_BASE_URL` is `None` (expected, since it is unset locally and is meant to fall back to the request host).
+
+### Current Result
+
+The QR code library and its configuration are now installed and available in the project. `requirements.txt`, `.env.example`, and `app.py` are ready for the next steps, and none of the existing login, item, scan, transaction, or admin functionality was changed or affected by this step.
