@@ -986,3 +986,40 @@ Where: `templates/item_stock.html` (new file)
 ### Current Result
 
 The QR workflow is now complete end to end: staff print a label (Step 6), a user scans its QR (Step 5 image), and lands on `/items/<barcode>/stock` (this step) where the item is already identified and they can add or remove stock. Both the scan page and the QR stock page share one transaction function, so they behave identically, and every action is recorded against the acting user with full date/time/instructor/topic/notes detail. All existing login, item, detail, QR-image, label, transaction, admin, and CSV-export behavior is unchanged.
+
+## Update: July 1, 2026 — QR Code Integration Step 8 (Refactor Stock Logic Safely — Verification)
+
+This update covers Step 8 of `QR_CODE_SYSTEM_INTEGRATION_PLAN.md`: "Refactor Stock Logic Safely." The goal of this step is to remove duplication by moving the shared add/remove logic into a single `process_stock_transaction()` function used by both `/scan` and `/items/<barcode>/stock`.
+
+### 1. What Was Changed
+
+- No new code changes were required for this step. The refactor it describes was performed as part of Step 7, because building the QR stock page and duplicating the entire scan logic would have been the exact "do not duplicate all logic long term" problem the plan warns about. Rather than copy ~90 lines into the new route and then delete them again here, the shared helper was introduced when the second caller was added.
+- Current state confirmed for this step: `process_stock_transaction(barcode, form)` is the single source of truth for validation, item lookup, the no-negative-stock guard, the `items.quantity` update, and the `transactions` insert. Both `scan()` (barcode read from the submitted form) and `item_stock(barcode)` (barcode read from the URL) call it, and neither route contains its own copy of the transaction logic.
+
+### 2. How It Was Done
+
+- The helper returns a `(message, error, status_code)` tuple so each route only decides which template to render, while all business rules and database writes live in one place.
+- Because the extraction already happened in Step 7, the work for Step 8 was focused on verification: confirming the duplication is gone and that the older `/scan` page still behaves exactly as it did before the QR feature existed.
+
+### 3. Why It Was Done This Way
+
+- A single shared function means the manual scan page and the QR stock page can never drift apart or develop inconsistent validation, which is the core reason the plan sequences this refactor as its own safety step.
+- Doing the extraction at the moment the second caller appeared (Step 7) avoided a throwaway period of duplicated code and kept every commit in a working state, which is the "refactor safely" intent of this step.
+
+### 4. Verification Performed
+
+- Ran `python -m py_compile app.py`; it compiled with no errors, and no linter errors were reported.
+- Confirmed in the source that `scan()` and `item_stock()` both delegate to `process_stock_transaction(...)` and that no transaction logic is duplicated between them.
+- Ran an end-to-end regression test of the older `/scan` page through the Flask test client against the local PostgreSQL database, using a temporary item (`TEST-SCAN-STEP8`, starting quantity 10), logged in as the seeded faculty user `F1001`:
+  - GET `/scan` returned 200.
+  - Add 4 succeeded and reported new quantity 14.
+  - Remove 5 succeeded and reported new quantity 9.
+  - Remove 999 was rejected with HTTP 400 ("Cannot remove 999...").
+  - An unknown barcode returned HTTP 404 ("No item was found for that barcode.").
+  - A submission missing the lab instructor returned HTTP 400 ("Lab Instructor is required.").
+  - Final quantity was 9 with exactly 2 recorded transactions (the rejected attempts recorded nothing).
+  - Deleted the temporary item and its transactions afterward, leaving the database unchanged.
+
+### Current Result
+
+Stock logic exists in exactly one place, `process_stock_transaction()`, and both the manual scan page and the QR stock page use it, so they are guaranteed to behave identically. The older `/scan` page was regression-tested and works exactly as before, including all validation and the no-negative-stock guard. All existing login, item, detail, QR-image, label, transaction, admin, and CSV-export behavior is unchanged.
