@@ -3,6 +3,7 @@ import csv
 import io
 import os
 import psycopg2
+import qrcode
 from psycopg2.extras import RealDictCursor
 import click
 from pathlib import Path
@@ -379,6 +380,44 @@ def item_detail(barcode):
         abort(404, description="Not recognized")
 
     return render_template("item_detail.html", item=item)
+
+@app.route("/items/<barcode>/qr.png")
+def item_qr_png(barcode):
+    login_redirect = require_login()
+
+    if login_redirect is not None:
+        return login_redirect
+
+    db = get_db()
+    item = db.execute(
+        "SELECT id FROM items WHERE barcode = %s",
+        (barcode,),
+    ).fetchone()
+
+    if item is None:
+        abort(404, description="Not recognized")
+
+    # Build the URL the QR code points to: the per-item stock page. Prefer the
+    # configured public base URL; fall back to the current request host in dev.
+    # The path is assembled as a string (not url_for) because the stock route
+    # is added in a later step, and this route must work before that exists.
+    base_url = APP_BASE_URL or request.host_url.rstrip("/")
+    stock_url = f"{base_url}/items/{barcode}/stock"
+
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_M,
+        box_size=10,
+        border=4,
+    )
+    qr.add_data(stock_url)
+    qr.make(fit=True)
+    image = qr.make_image(fill_color="black", back_color="white")
+
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+
+    return Response(buffer.getvalue(), mimetype="image/png")
 
 @app.route("/items/new", methods=["GET", "POST"])
 def item_new():

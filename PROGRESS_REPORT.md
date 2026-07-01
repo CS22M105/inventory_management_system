@@ -850,3 +850,40 @@ Where: `templates/items.html`
 ### Current Result
 
 Users can open any item's full details from the All Items list, students included, while editing stays restricted to faculty/administrators. The new `/items/<barcode>` page gives QR labels a working destination in the next steps, and all existing login, item, scan, transaction, admin, and CSV-export behavior is unchanged.
+
+## Update: July 1, 2026 — QR Code Integration Step 5 (QR PNG Route)
+
+This update covers Step 5 of `QR_CODE_SYSTEM_INTEGRATION_PLAN.md`: "Add QR PNG Route." The app now serves a live QR-code image at `/items/<barcode>/qr.png`. The image is generated in memory on each request (no files are saved) and encodes the per-item stock URL, so scanning the QR with a phone opens that item's stock page.
+
+### 1. What Was Changed
+
+Where: `app.py`
+
+- Added `import qrcode` to the imports.
+- Added a new route and view function `item_qr_png(barcode)` mapped to `/items/<barcode>/qr.png`. It requires login (via `require_login()`), confirms the barcode belongs to a real item, and returns a PNG.
+- If no item matches the barcode, it calls `abort(404, description="Not recognized")`, consistent with the detail page from Step 4.
+- The route builds the target URL as `{base_url}/items/{barcode}/stock`, where `base_url` is the configured `APP_BASE_URL` or, if unset, the current request host (`request.host_url`). It then renders a QR code with `qrcode.QRCode(...)`, saves the image to an in-memory `io.BytesIO` buffer, and returns it with `Response(..., mimetype="image/png")`.
+
+### 2. How It Was Done
+
+- The QR settings mirror the existing `testQR/generate_qr.py` prototype (`version=1`, `ERROR_CORRECT_M`, `box_size=10`, `border=4`, black on white) so the production route matches the already-validated sample.
+- The image is streamed from an in-memory buffer rather than written to disk. This keeps the server stateless, avoids filesystem cleanup, and means the QR always reflects the item's current barcode because it is regenerated on every request.
+- The stock URL is assembled as a plain string (`f"{base_url}/items/{barcode}/stock"`) instead of `url_for('item_stock', ...)`. The dedicated stock route is scheduled for a later step (Step 6), and using `url_for` for a route that does not exist yet would raise a `BuildError`. Assembling the string lets the QR encode the correct final URL now, so the image and its contents can be fully tested before the stock page is built.
+- `APP_BASE_URL` (already defined in config) is preferred so that printed labels point at the real deployed hostname; the `request.host_url` fallback keeps local development working without extra configuration.
+
+### 3. Why It Was Done This Way
+
+- A dynamic PNG route is the simplest reliable way to put a QR on a web page or a printed label: the browser loads it like any normal image (`<img src=".../qr.png">`), and there are no stored files to manage or serve.
+- Encoding the stock URL (rather than just the barcode) means a phone camera can scan the label and jump straight to the correct action page, which is the core goal of the QR workflow.
+- Requiring login and validating the barcode keeps the image route consistent with the rest of the app's access rules and prevents QR images from being generated for codes that do not exist.
+
+### 4. Verification Performed
+
+- Ran `python -m py_compile app.py`; it compiled with no errors.
+- Confirmed `qrcode` and `Pillow` import in the project virtual environment (both are already pinned in `requirements.txt` as `qrcode[pil]`).
+- Reproduced the route's image logic in isolation and confirmed it returns a valid PNG (correct `\x89PNG` header, ~900 bytes) that encodes `http://127.0.0.1:5000/items/KATZ-NURS-000001/stock`.
+- Manual browser check (to run locally): start the app, log in, open `/items/<barcode>/qr.png` for a real item — the QR image renders; scanning it with a phone shows the `.../items/<barcode>/stock` URL. An unknown barcode returns 404 "Not recognized".
+
+### Current Result
+
+Each item now has an on-demand QR image at `/items/<barcode>/qr.png` that encodes its stock URL and is generated fresh in memory on every request. This is the image the printable label page will embed in the next step. All existing login, item, detail, scan, transaction, admin, and CSV-export behavior is unchanged. Note: the URL the QR points to (`/items/<barcode>/stock`) becomes a working page in Step 6; until then, scanning resolves to the correct address but that page does not exist yet.
