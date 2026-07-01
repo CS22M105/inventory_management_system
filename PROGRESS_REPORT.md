@@ -887,3 +887,55 @@ Where: `app.py`
 ### Current Result
 
 Each item now has an on-demand QR image at `/items/<barcode>/qr.png` that encodes its stock URL and is generated fresh in memory on every request. This is the image the printable label page will embed in the next step. All existing login, item, detail, scan, transaction, admin, and CSV-export behavior is unchanged. Note: the URL the QR points to (`/items/<barcode>/stock`) becomes a working page in Step 6; until then, scanning resolves to the correct address but that page does not exist yet.
+
+## Update: July 1, 2026 — QR Code Integration Step 6 (Printable Label Page)
+
+This update covers Step 6 of `QR_CODE_SYSTEM_INTEGRATION_PLAN.md`: "Add Printable Label Page." There is now a page at `/items/<barcode>/label` that shows a compact, print-ready label containing the Katz Nursing heading, the item name, its internal code, the QR image from Step 5, and the room and bin. A "Print Label" button opens the browser's print dialog, and print CSS hides the site chrome so only the label prints.
+
+### 1. What Was Changed
+
+Where: `app.py`
+
+- Added a new route and view function `item_label(barcode)` mapped to `/items/<barcode>/label`. It requires login (via `require_login()`), looks up the item's label fields (`barcode`, `name`, `room`, `bin_location`, `company`, `expiration_date`) by barcode, and renders the new `item_label.html` template. An unknown barcode returns `abort(404, description="Not recognized")`, consistent with Steps 4 and 5.
+
+Where: `templates/item_label.html` (new file)
+
+- Renders a `.qr-label` block containing: "Katz Nursing Inventory" heading, item name, internal code, the QR `<img>` (sourced from `url_for('item_qr_png', ...)`, the Step 5 route), plus Room and Bin. Vendor and Expiration Date are shown only when present (expiration is hidden when it is still the `00/00/0000` placeholder).
+- Adds a "Print Label" button that calls `window.print()`, plus "Back to Item" and "Back to All Items" links. These controls and the page header are wrapped in `.no-print` so they do not appear on the printed output.
+
+Where: `static/css/styles.css`
+
+- Added `.qr-label` styles (white background, thin dark border, fixed 2.4in width) and `.qr-label img` sizing (1.1in square), matching the plan's recommended label dimensions, plus small helper classes for the label's title, name, code, and meta lines.
+- Added an `@media print` block that hides `header`, `footer`, `nav`, and any `.no-print` element, resets the page background to white, and strips the `main`/`section` margins, borders, and shadows so the label prints cleanly on its own.
+
+Where: `templates/items.html`
+
+- Added a "Print Label" link to each row's Action group (visible to all logged-in users), alongside the existing "View" and faculty/admin-only "Edit" links.
+
+Where: `templates/item_detail.html`
+
+- Added a "Print Label" button to the item detail action group, pointing at the new label route. (In Step 4 this button was intentionally omitted because the route did not exist yet.)
+
+### 2. How It Was Done
+
+- The label embeds the QR by pointing an `<img>` at the existing `/items/<barcode>/qr.png` route via `url_for('item_qr_png', ...)`, so the label page does not regenerate the QR itself — it reuses the Step 5 image route as the single source of truth.
+- Printing uses the browser's built-in `window.print()` rather than any library or server-side PDF generation, which is the simplest reliable approach and matches the plan's "start with browser print" guidance.
+- The separation between screen and print is handled entirely with the `.no-print` class and the `@media print` rule, so the same page serves both the on-screen preview (with buttons) and the clean printed label (label only).
+- CSS was appended to the end of `styles.css` next to the existing responsive block, and reuses the plan's recommended values so the label size is predictable for common label printers.
+
+### 3. Why It Was Done This Way
+
+- A dedicated label page keeps printing separate from the detail/stock views, so staff can print without accidentally triggering stock changes, and the print CSS guarantees the surrounding site UI never ends up on the label.
+- Reusing the Step 5 QR route (instead of embedding image bytes in the page) keeps one code path for QR generation and ensures the printed QR always matches what a scan would open.
+- Showing Vendor and Expiration only when meaningful keeps small labels uncluttered, while Room and Bin are always shown because they are the fields staff use to physically locate and restock an item.
+- Access is allowed for any logged-in user because printing a label is a low-risk, read-only action; it does not modify inventory.
+
+### 4. Verification Performed
+
+- Ran `python -m py_compile app.py`; it compiled with no errors, and no linter errors were reported for the changed files.
+- Confirmed the label route selects and passes the fields the template uses, and that the QR `<img>` resolves through the working `item_qr_png` route added in Step 5.
+- Manual browser check (to run locally): start the app, log in, open `/items/<barcode>/label` for a real item — the label page opens, the QR image appears, and "Print Label" opens the browser print dialog showing only the label with the item name, code, room, and bin. An unknown barcode returns 404 "Not recognized".
+
+### Current Result
+
+Every item now has a printable label page at `/items/<barcode>/label`, reachable from both the All Items list and the item detail page. The label shows the item name, internal code, QR image, room, and bin, prints cleanly via the browser with site navigation hidden, and the QR on it opens the item's stock URL. All existing login, item, detail, QR-image, scan, transaction, admin, and CSV-export behavior is unchanged. The per-item stock page that the QR ultimately targets (`/items/<barcode>/stock`) is still scheduled for a later step.

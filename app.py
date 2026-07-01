@@ -419,6 +419,28 @@ def item_qr_png(barcode):
 
     return Response(buffer.getvalue(), mimetype="image/png")
 
+@app.route("/items/<barcode>/label")
+def item_label(barcode):
+    login_redirect = require_login()
+
+    if login_redirect is not None:
+        return login_redirect
+
+    db = get_db()
+    item = db.execute(
+        """
+        SELECT barcode, name, room, bin_location, company, expiration_date
+        FROM items
+        WHERE barcode = %s
+        """,
+        (barcode,),
+    ).fetchone()
+
+    if item is None:
+        abort(404, description="Not recognized")
+
+    return render_template("item_label.html", item=item)
+
 @app.route("/items/new", methods=["GET", "POST"])
 def item_new():
     manager_redirect = require_item_manager()
