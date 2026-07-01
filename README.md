@@ -149,3 +149,32 @@ inventory/
     css/
     js/
 ```
+
+## To run the current inventory app:
+
+```bash
+cd /Users/farhatjahan/Desktop/YU/summer26/YU_internship/Sim_Intern/inventory/inventory_management_system
+source .venv/bin/activate
+python -m flask --app app run --debug --port 5001
+```
+
+Then open:
+
+```text
+http://127.0.0.1:5001/login
+```
+
+If PostgreSQL is not running, start it first:
+
+```bash
+brew services start postgresql
+```
+
+If you need to initialize the database from scratch:
+
+```bash
+python -m flask --app app init-db
+```
+
+Careful: `init-db` recreates the tables and demo data, so only run it if you are okay resetting the database.
+
