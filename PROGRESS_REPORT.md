@@ -759,3 +759,49 @@ Where: `app.py`
 ### Current Result
 
 The database now has an `item_barcode_number_seq` sequence that will feed automatic internal item codes in later steps. New databases get it from `schema.sql`, existing databases get it from the `ensure_barcode_sequence(db)` runtime-safety helper, and re-running `init-db` is still safe. No existing functionality was changed by this step.
+
+## Update: July 1, 2026 — QR Code Integration Step 3 (Optional Barcode On Add Item)
+
+This update covers Step 3 of `QR_CODE_SYSTEM_INTEGRATION_PLAN.md`: "Make Barcode Optional On Add Item." The barcode field on the Add Item form is now optional. If it is left blank, the app automatically generates a unique internal code (for example, `KATZ-NURS-000001`) using the sequence added in Step 2. If a barcode is typed in, that exact value is still used as before. Editing an existing item continues to require a barcode.
+
+### 1. What Was Changed
+
+Where: `app.py`
+
+- Added a new helper, `generate_next_item_barcode(db)`, next to `ensure_barcode_sequence(db)`. It calls `ensure_barcode_sequence(db)` first (runtime safety), then reads the next value with `SELECT nextval('item_barcode_number_seq')` and formats it as `f"{BARCODE_PREFIX}-{number:06d}"`, which produces codes like `KATZ-NURS-000001`.
+- Changed `get_item_form_data()` to `get_item_form_data(require_barcode=True)`. When `require_barcode` is `False`, a blank barcode no longer triggers a validation error; the other required fields (name, bin location, room) are still enforced, with a matching error message ("Name, bin location, and room are required.").
+- Updated the `item_new` route to call `get_item_form_data(require_barcode=False)` and, when the submitted barcode is blank, generate one with `generate_next_item_barcode(db)` before inserting the row.
+- Left the `item_edit` route calling `get_item_form_data()` with the default `require_barcode=True`, so editing still requires an explicit barcode.
+
+Where: `templates/item_new.html`
+
+- Renamed the label from "Barcode" to "Barcode / Internal Code".
+- Removed the `required` attribute from the barcode input and changed the placeholder to "Leave blank to auto-generate".
+- Added helper text under the field: "Leave blank to auto-generate a Katz Nursing inventory code."
+
+### 2. How It Was Done
+
+- The generation helper mirrors the exact approach in the integration plan (`nextval` + zero-padded formatting), and reuses the existing `BARCODE_PREFIX` config and `item_barcode_number_seq` sequence from Steps 1 and 2, so no new configuration or schema was introduced.
+- Rather than duplicating the validation logic, the shared `get_item_form_data()` gained a single `require_barcode` flag. This keeps one source of truth for item form parsing while letting "add" and "edit" differ only in whether a barcode is mandatory.
+- Barcode generation happens in the route (not in the form parser) and only after validation succeeds, so a sequence number is consumed only when an item is actually about to be created. Manual barcodes bypass generation entirely.
+- The existing duplicate-barcode safeguard was left untouched: if a generated or manual code collides, the `psycopg2.IntegrityError` handler still shows "An item with this barcode already exists."
+
+### 3. Why It Was Done This Way
+
+- Auto-generating codes removes the need for staff to invent unique barcodes by hand and guarantees every item has a scannable code, which is the foundation the later QR label/scan steps depend on.
+- Using the database sequence (instead of `COUNT(*) + 1`) keeps codes unique even under simultaneous item creation, matching the reasoning documented in Step 2.
+- Keeping the manual-entry path working means pre-labeled or vendor-barcoded items can still be registered with their existing codes, so the change is additive and backward-compatible.
+- Editing still requires a barcode because an existing item already has one; a blank value there would more likely be a mistake than a request to regenerate.
+
+### 4. Verification Performed
+
+- Ran `python -m py_compile app.py`; it compiled with no errors.
+- Used the Flask test client (logged in as the seeded `F1001` faculty user) against the local PostgreSQL database:
+  - Created an item with a blank barcode and confirmed the stored value was `KATZ-NURS-000001`.
+  - Created an item with a manual barcode (`MANUAL-ZZ2-001`) and confirmed that exact value was stored unchanged.
+  - Removed the two temporary test items afterward.
+- Reset `item_barcode_number_seq` back to `1` after testing (verified no real items use the `KATZ-NURS-` format yet), so the first real auto-generated item will still be `KATZ-NURS-000001`.
+
+### Current Result
+
+Staff can now add an item without typing a barcode and the system assigns the next `KATZ-NURS-######` code automatically, while manually entered barcodes continue to work exactly as before. Editing behavior, duplicate protection, and all other login, item, scan, transaction, admin, and CSV-export functionality are unchanged.

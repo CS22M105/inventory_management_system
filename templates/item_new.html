@@ -12,15 +12,15 @@
     {% endif %}
 
     <form method="post" action="{{ url_for('item_new') }}">
-        <label for="barcode">Barcode</label>
+        <label for="barcode">Barcode / Internal Code</label>
         <input
             type="text"
             id="barcode"
             name="barcode"
-            placeholder="Example: GLOVE-M-001"
+            placeholder="Leave blank to auto-generate"
             value="{{ item.get('barcode', '') }}"
-            required
         >
+        <small class="field-help">Leave blank to auto-generate a Katz Nursing inventory code.</small>
 
         <label for="name">Item Name</label>
         <input
