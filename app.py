@@ -578,6 +578,99 @@ def item_edit(item_id):
 
     return render_template("item_edit.html", item=item)
 
+def process_stock_transaction(barcode, form):
+    """Validate and apply one add/remove stock transaction.
+
+    Reads action/quantity/instructor/topic/notes from `form`, validates them,
+    finds the item by `barcode`, updates its quantity, and records a
+    transaction row for the logged-in user. Returns a
+    (message, error, status_code) tuple where exactly one of message/error is
+    set. Shared by /scan and the per-item QR stock page so both behave
+    identically.
+    """
+    transaction_type = form.get("transaction_type", "").strip()
+    lab_instructor = form.get("lab_instructor", "").strip()
+    topic_of_day = form.get("topic_of_day", "").strip()
+    notes = form.get("notes", "").strip()
+
+    try:
+        quantity = int(form.get("quantity", "1"))
+    except ValueError:
+        return None, "Quantity must be a number.", 400
+
+    if not barcode:
+        return None, "Barcode is required.", 400
+
+    if transaction_type not in {"add", "remove"}:
+        return None, "Choose Add Stock or Remove Stock.", 400
+
+    if quantity <= 0:
+        return None, "Quantity must be greater than zero.", 400
+
+    # Every entry must be filled before a transaction is recorded. The form
+    # marks these required, but an accidental Enter (e.g. from a barcode
+    # scanner) can bypass client-side checks, so enforce it here too.
+    if not lab_instructor:
+        return None, "Lab Instructor is required.", 400
+
+    if not topic_of_day:
+        return None, "Topic of the Day is required.", 400
+
+    if not notes:
+        return None, "Notes are required.", 400
+
+    db = get_db()
+    ensure_transaction_columns(db)
+    item = db.execute(
+        """
+        SELECT id, name, quantity
+        FROM items
+        WHERE barcode = %s
+        """,
+        (barcode,),
+    ).fetchone()
+
+    if item is None:
+        return None, "No item was found for that barcode.", 404
+
+    if transaction_type == "remove" and quantity > item["quantity"]:
+        return None, f"Cannot remove {quantity}. Only {item['quantity']} available.", 400
+
+    if transaction_type == "add":
+        new_quantity = item["quantity"] + quantity
+    else:
+        new_quantity = item["quantity"] - quantity
+
+    db.execute(
+        """
+        UPDATE items
+        SET quantity = %s
+        WHERE id = %s
+        """,
+        (new_quantity, item["id"]),
+    )
+    db.execute(
+        """
+        INSERT INTO transactions (
+            user_id, item_id, transaction_type, quantity,
+            lab_instructor, topic_of_day, notes
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """,
+        (
+            session["user_id"],
+            item["id"],
+            transaction_type,
+            quantity,
+            lab_instructor,
+            topic_of_day,
+            notes,
+        ),
+    )
+    db.commit()
+
+    return f"{item['name']} updated successfully. New quantity: {new_quantity}.", None, 200
+
 @app.route("/scan", methods=["GET", "POST"])
 def scan():
     login_redirect = require_login()
@@ -586,97 +679,54 @@ def scan():
         return login_redirect
 
     if request.method == "POST":
-        barcode = request.form.get("barcode", "").strip()
-        transaction_type = request.form.get("transaction_type", "").strip()
-        lab_instructor = request.form.get("lab_instructor", "").strip()
-        topic_of_day = request.form.get("topic_of_day", "").strip()
-        notes = request.form.get("notes", "").strip()
-
-        try:
-            quantity = int(request.form.get("quantity", "1"))
-        except ValueError:
-            return render_template("scan.html", error="Quantity must be a number."), 400
-
-        if not barcode:
-            return render_template("scan.html", error="Barcode is required."), 400
-
-        if transaction_type not in {"add", "remove"}:
-            return render_template("scan.html", error="Choose Add Stock or Remove Stock."), 400
-
-        if quantity <= 0:
-            return render_template("scan.html", error="Quantity must be greater than zero."), 400
-
-        # Every entry must be filled before a transaction is recorded. The form
-        # marks these required, but an accidental Enter (e.g. from a barcode
-        # scanner) can bypass client-side checks, so enforce it here too.
-        if not lab_instructor:
-            return render_template("scan.html", error="Lab Instructor is required."), 400
-
-        if not topic_of_day:
-            return render_template("scan.html", error="Topic of the Day is required."), 400
-
-        if not notes:
-            return render_template("scan.html", error="Notes are required."), 400
-
-        db = get_db()
-        ensure_transaction_columns(db)
-        item = db.execute(
-            """
-            SELECT id, name, quantity
-            FROM items
-            WHERE barcode = %s
-            """,
-            (barcode,),
-        ).fetchone()
-
-        if item is None:
-            return render_template("scan.html", error="No item was found for that barcode."), 404
-
-        if transaction_type == "remove" and quantity > item["quantity"]:
-            return render_template(
-                "scan.html",
-                error=f"Cannot remove {quantity}. Only {item['quantity']} available.",
-            ), 400
-
-        if transaction_type == "add":
-            new_quantity = item["quantity"] + quantity
-        else:
-            new_quantity = item["quantity"] - quantity
-
-        db.execute(
-            """
-            UPDATE items
-            SET quantity = %s
-            WHERE id = %s
-            """,
-            (new_quantity, item["id"]),
+        message, error, status = process_stock_transaction(
+            request.form.get("barcode", "").strip(),
+            request.form,
         )
-        db.execute(
-            """
-            INSERT INTO transactions (
-                user_id, item_id, transaction_type, quantity,
-                lab_instructor, topic_of_day, notes
-            )
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-            """,
-            (
-                session["user_id"],
-                item["id"],
-                transaction_type,
-                quantity,
-                lab_instructor,
-                topic_of_day,
-                notes,
-            ),
-        )
-        db.commit()
 
-        return render_template(
-            "scan.html",
-            message=f"{item['name']} updated successfully. New quantity: {new_quantity}.",
-        )
+        if error:
+            return render_template("scan.html", error=error), status
+
+        return render_template("scan.html", message=message)
 
     return render_template("scan.html")
+
+def get_stock_item(db, barcode):
+    return db.execute(
+        """
+        SELECT id, barcode, name, room, bin_location, quantity
+        FROM items
+        WHERE barcode = %s
+        """,
+        (barcode,),
+    ).fetchone()
+
+@app.route("/items/<barcode>/stock", methods=["GET", "POST"])
+def item_stock(barcode):
+    login_redirect = require_login()
+
+    if login_redirect is not None:
+        return login_redirect
+
+    db = get_db()
+    item = get_stock_item(db, barcode)
+
+    if item is None:
+        abort(404, description="Not recognized")
+
+    if request.method == "POST":
+        # The barcode is taken from the URL, not a form field, so it cannot be
+        # tampered with from the browser and the route already identifies the item.
+        message, error, status = process_stock_transaction(barcode, request.form)
+        # Re-read so the page reflects the current quantity after the update.
+        item = get_stock_item(db, barcode)
+
+        if error:
+            return render_template("item_stock.html", item=item, error=error), status
+
+        return render_template("item_stock.html", item=item, message=message)
+
+    return render_template("item_stock.html", item=item)
 
 def get_transaction_filters():
     return {

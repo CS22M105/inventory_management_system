@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}Stock: {{ item["name"] }} | Nursing Inventory System{% endblock %}
+
+{% block content %}
+<section>
+    <div class="page-header">
+        <div>
+            <h2>Stock Action</h2>
+            <p>Record stock added to or removed from this item.</p>
+        </div>
+
+        <a class="button-link secondary-link" href="{{ url_for('item_detail', barcode=item['barcode']) }}">Item Details</a>
+    </div>
+
+    {% if error %}
+    <p class="error-message">{{ error }}</p>
+    {% endif %}
+
+    {% if message %}
+    <p class="success-message">{{ message }}</p>
+    {% endif %}
+
+    <div class="status-grid">
+        <article>
+            <h3>Item</h3>
+            <p>{{ item["name"] }}</p>
+            <span>{{ item["barcode"] }}</span>
+        </article>
+        <article>
+            <h3>Current Quantity</h3>
+            <p>{{ item["quantity"] }}</p>
+            <span>Room {{ item["room"] }} &middot; Bin {{ item["bin_location"] }}</span>
+        </article>
+    </div>
+
+    <form method="post" action="{{ url_for('item_stock', barcode=item['barcode']) }}">
+        <label for="transaction_type">Action</label>
+        <select id="transaction_type" name="transaction_type" required>
+            <option value="">Select an action</option>
+            <option value="add">Add Stock</option>
+            <option value="remove">Remove Stock</option>
+        </select>
+
+        <label for="quantity">Quantity</label>
+        <input
+            type="number"
+            id="quantity"
+            name="quantity"
+            min="1"
+            value="1"
+            required
+        >
+
+        <label for="lab_instructor">Lab Instructor</label>
+        <input
+            type="text"
+            id="lab_instructor"
+            name="lab_instructor"
+            placeholder="Example: Professor Smith"
+            required
+        >
+
+        <label for="topic_of_day">Topic of the Day</label>
+        <input
+            type="text"
+            id="topic_of_day"
+            name="topic_of_day"
+            placeholder="Example: Wound Care Simulation"
+            required
+        >
+
+        <label for="notes">Notes</label>
+        <textarea
+            id="notes"
+            name="notes"
+            rows="4"
+            placeholder="Reason or class/lab note"
+            required
+        ></textarea>
+
+        <button type="submit">Submit Inventory Action</button>
+    </form>
+</section>
+{% endblock %}

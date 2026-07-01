@@ -939,3 +939,50 @@ Where: `templates/item_detail.html`
 ### Current Result
 
 Every item now has a printable label page at `/items/<barcode>/label`, reachable from both the All Items list and the item detail page. The label shows the item name, internal code, QR image, room, and bin, prints cleanly via the browser with site navigation hidden, and the QR on it opens the item's stock URL. All existing login, item, detail, QR-image, scan, transaction, admin, and CSV-export behavior is unchanged. The per-item stock page that the QR ultimately targets (`/items/<barcode>/stock`) is still scheduled for a later step.
+
+## Update: July 1, 2026 — QR Code Integration Step 7 (QR Stock Page)
+
+This update covers Step 7 of `QR_CODE_SYSTEM_INTEGRATION_PLAN.md`: "Add QR Stock Page." Scanning an item's QR code now opens `/items/<barcode>/stock`, a page that already knows which item it is (no barcode typing). It shows the item name, internal code, current quantity, room, and bin, then offers the same add/remove transaction form as the scan page. This completes the QR workflow: the QR on the printed label from Step 6 now points to a working, item-specific stock page.
+
+### 1. What Was Changed
+
+Where: `app.py`
+
+- Refactored the shared add/remove logic out of the `scan()` route into a new helper `process_stock_transaction(barcode, form)`. The helper validates the action, quantity, lab instructor, topic, and notes; finds the item by barcode; blocks removing more than is available; updates `items.quantity`; and inserts the `transactions` row for the logged-in user. It returns a `(message, error, status_code)` tuple.
+- Rewrote `scan()` to call `process_stock_transaction(...)` (reading the barcode from the submitted form) instead of containing the logic inline. Its behavior and error/status codes are unchanged.
+- Added a small helper `get_stock_item(db, barcode)` that selects the fields the stock page displays (`id`, `barcode`, `name`, `room`, `bin_location`, `quantity`).
+- Added a new route `item_stock(barcode)` at `/items/<barcode>/stock` supporting GET and POST. GET renders the prefilled page; POST runs `process_stock_transaction(barcode, request.form)`, re-reads the item so the page shows the updated quantity, and renders the result. An unknown barcode returns `abort(404, description="Not recognized")`.
+
+Where: `templates/item_stock.html` (new file)
+
+- Displays the item summary (name, internal code, current quantity, room, bin) and the transaction form: Action (Add/Remove), Quantity, Lab Instructor, Topic of the Day, Notes, and a Submit button. Shows success and error messages like the scan page.
+- The form posts to `url_for('item_stock', barcode=item['barcode'])` and contains no barcode field.
+
+### 2. How It Was Done
+
+- Per the plan, the transaction logic now lives in one shared helper used by both `/scan` and `/items/<barcode>/stock`, so the two pages cannot drift apart or develop inconsistent validation bugs. Extracting it also kept `scan()` behaving exactly as before.
+- The stock page takes the barcode from the URL, not from a hidden form field. This matches the plan's "better" recommendation: the route already identifies the item, and there is no browser-submitted barcode to tamper with.
+- After a POST, the route re-reads the item with `get_stock_item(...)` before rendering, so the "Current Quantity" shown always reflects the change that was just made (or the unchanged value if the action was rejected).
+- The helper returns the HTTP status code (200/400/404) alongside the message/error so both routes preserve the original status semantics (for example, a rejected over-removal is still a 400 and a missing item is a 404).
+
+### 3. Why It Was Done This Way
+
+- A per-item stock page is the destination of the whole QR system: a user scans the label, lands directly on that item's stock form, and never has to type or scan a barcode into a field, which is faster and less error-prone in a busy lab.
+- Sharing one transaction function guarantees the QR path enforces the exact same rules the scan path already does — required instructor/topic/notes, positive quantities, and the no-negative-stock guard — so audit records stay complete and consistent no matter how a transaction is started.
+- Any logged-in user (including students) can use the stock page, matching the existing scan page's access model; recording who performed the action is handled by the transaction's `user_id`.
+
+### 4. Verification Performed
+
+- Ran `python -m py_compile app.py`; it compiled with no errors, and no linter errors were reported for the changed files.
+- Confirmed the route registers as `('/items/<barcode>/stock', 'item_stock', ['GET', 'POST'])` and that `url_for('item_stock', barcode=...)` resolves; this is also the exact URL the Step 5 QR image encodes, so scanned labels now reach a real page.
+- Ran an end-to-end test through the Flask test client against the local PostgreSQL database using a temporary item (`TEST-STOCK-STEP7`, starting quantity 5), logged in as the seeded student `S1001`:
+  - GET `/items/<barcode>/stock` returned 200 and showed the item name and current quantity (prefilled).
+  - Add 3 succeeded and reported the new quantity 8.
+  - Remove 2 succeeded and reported the new quantity 6.
+  - Remove 100 was rejected with HTTP 400 and the message "Cannot remove 100...", and created no transaction.
+  - The `transactions` table recorded both successful actions with `user_id`, transaction type, quantity, `transaction_date`, `transaction_time`, `lab_instructor`, `topic_of_day`, and `notes` populated.
+  - Deleted the temporary item and its transactions afterward, leaving the database as it was.
+
+### Current Result
+
+The QR workflow is now complete end to end: staff print a label (Step 6), a user scans its QR (Step 5 image), and lands on `/items/<barcode>/stock` (this step) where the item is already identified and they can add or remove stock. Both the scan page and the QR stock page share one transaction function, so they behave identically, and every action is recorded against the acting user with full date/time/instructor/topic/notes detail. All existing login, item, detail, QR-image, label, transaction, admin, and CSV-export behavior is unchanged.
