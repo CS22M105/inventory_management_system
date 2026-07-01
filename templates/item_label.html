@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}Label: {{ item["name"] }} | Nursing Inventory System{% endblock %}
+
+{% block content %}
+<section>
+    <div class="page-header no-print">
+        <div>
+            <h2>Printable Label</h2>
+            <p>Print this label and attach it to the item or its bin.</p>
+        </div>
+    </div>
+
+    <div class="qr-label">
+        <p class="qr-label-title">Katz Nursing Inventory</p>
+        <p class="qr-label-name">{{ item["name"] }}</p>
+        <p class="qr-label-code">{{ item["barcode"] }}</p>
+        <img
+            src="{{ url_for('item_qr_png', barcode=item['barcode']) }}"
+            alt="QR code for {{ item['barcode'] }}"
+        >
+        <p class="qr-label-meta">Room: {{ item["room"] }}</p>
+        <p class="qr-label-meta">Bin: {{ item["bin_location"] }}</p>
+        {% if item["company"] %}
+        <p class="qr-label-meta">Vendor: {{ item["company"] }}</p>
+        {% endif %}
+        {% if item["expiration_date"] and item["expiration_date"] != "00/00/0000" %}
+        <p class="qr-label-meta">Exp: {{ item["expiration_date"] }}</p>
+        {% endif %}
+    </div>
+
+    <div class="action-group no-print" style="margin-top: 24px;">
+        <button type="button" onclick="window.print()">Print Label</button>
+        <a class="button-link secondary-link" href="{{ url_for('item_detail', barcode=item['barcode']) }}">Back to Item</a>
+        <a class="button-link secondary-link" href="{{ url_for('items') }}">Back to All Items</a>
+    </div>
+</section>
+{% endblock %}
