@@ -47,16 +47,19 @@
                     Protected
                     {% elif user["is_active"] %}
                     <form class="inline-form" method="post" action="{{ url_for('admin_user_deactivate', user_id=user['id']) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <button class="danger-button" type="submit">Deactivate</button>
                     </form>
                     {% else %}
                     <div class="action-group">
                         <form class="inline-form" method="post" action="{{ url_for('admin_user_activate', user_id=user['id']) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <button type="submit">Reactivate</button>
                         </form>
 
                         {% if user["transaction_count"] == 0 %}
                         <form class="inline-form" method="post" action="{{ url_for('admin_user_delete', user_id=user['id']) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <button class="danger-button" type="submit">Delete</button>
                         </form>
                         {% else %}

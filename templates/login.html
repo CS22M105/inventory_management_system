@@ -14,6 +14,7 @@
     <p>Enter your student, faculty, or administrator ID to access the inventory system.</p>
 
     <form method="post" action="/login">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label for="login_mode">Login Type</label>
         <select id="login_mode" name="login_mode" required>
             <option value="user">User</option>

@@ -53,7 +53,10 @@
             </details>
             <a href="{{ url_for('transactions') }}">Transactions</a>
             {% endif %}
-            <a href="{{ url_for('logout') }}">Logout</a>
+            <form class="nav-logout-form" method="post" action="{{ url_for('logout') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit">Logout</button>
+            </form>
         </nav>
         {% endif %}
         {% endblock %}

@@ -18,6 +18,7 @@
     {% endif %}
 
     <form method="post" action="{{ url_for('item_edit', item_id=item['id']) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label for="barcode">Barcode</label>
         <input
             type="text"

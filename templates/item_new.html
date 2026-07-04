@@ -12,6 +12,7 @@
     {% endif %}
 
     <form method="post" action="{{ url_for('item_new') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label for="barcode">Barcode / Internal Code</label>
         <input
             type="text"

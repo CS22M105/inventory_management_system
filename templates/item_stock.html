@@ -35,6 +35,7 @@
     </div>
 
     <form method="post" action="{{ url_for('item_stock', barcode=item['barcode']) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label for="transaction_type">Action</label>
         <select id="transaction_type" name="transaction_type" required>
             <option value="">Select an action</option>

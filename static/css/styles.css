@@ -67,6 +67,28 @@ nav a:hover,
     background: #7f1d1d;
 }
 
+.nav-logout-form {
+    display: inline;
+    margin: 0;
+    max-width: none;
+    padding: 0;
+}
+
+.nav-logout-form button {
+    background: #991b1b;
+    border: 1px solid rgba(153, 27, 27, 0.2);
+    border-radius: 6px;
+    color: white;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 400;
+    padding: 8px 12px;
+}
+
+.nav-logout-form button:hover {
+    background: #7f1d1d;
+}
+
 .nav-dropdown {
     position: relative;
 }
