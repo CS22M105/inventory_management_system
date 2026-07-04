@@ -1,4 +1,5 @@
 from flask import Flask, Response, abort, g, redirect, render_template, request, session, url_for
+from flask_wtf.csrf import CSRFProtect, CSRFError
 import csv
 import io
 import os
@@ -30,6 +31,20 @@ app.config["SECRET_KEY"] = SECRET_KEY or "dev-secret-key-change-before-productio
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["SESSION_COOKIE_SECURE"] = APP_ENV == "production"
+
+# CSRF protection for every state-changing (POST/PUT/PATCH/DELETE) request.
+# Each form must include the hidden csrf_token field (see templates). Tokens
+# are signed with SECRET_KEY, so a strong key is required in production.
+csrf = CSRFProtect(app)
+
+
+@app.errorhandler(CSRFError)
+def handle_csrf_error(error):
+    # A missing/expired/invalid token lands here instead of a raw 400 page.
+    return render_template(
+        "login.html",
+        error="Your session expired or the form was invalid. Please try again.",
+    ), 400
 
 
 class Database:
@@ -261,7 +276,7 @@ def login():
 
     return render_template("login.html")
 
-@app.route("/logout")
+@app.route("/logout", methods=["POST"])
 def logout():
     session.clear()
     return redirect(url_for("login"))
