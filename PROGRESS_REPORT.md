@@ -1023,3 +1023,60 @@ This update covers Step 8 of `QR_CODE_SYSTEM_INTEGRATION_PLAN.md`: "Refactor Sto
 ### Current Result
 
 Stock logic exists in exactly one place, `process_stock_transaction()`, and both the manual scan page and the QR stock page use it, so they are guaranteed to behave identically. The older `/scan` page was regression-tested and works exactly as before, including all validation and the no-negative-stock guard. All existing login, item, detail, QR-image, label, transaction, admin, and CSV-export behavior is unchanged.
+
+## Update: July 4, 2026 — Security Hardening: CSRF Protection On All POST Forms
+
+This update adds Cross-Site Request Forgery (CSRF) protection to every state-changing request, as the first item from the production-readiness review. Before this change, any POST (stock changes, item add/edit, and user deactivate/activate/delete) could be forged by another website while a user was logged in. Now every such request must carry a valid, per-session CSRF token or it is rejected.
+
+### 1. What Was Changed
+
+Where: `requirements.txt`
+
+- `Flask-WTF>=1.2,<2.0` is listed as a dependency (installed version 1.3.0).
+
+Where: `app.py`
+
+- Imported `CSRFProtect` and `CSRFError` from `flask_wtf.csrf`.
+- Initialized `csrf = CSRFProtect(app)` immediately after the session/cookie configuration. This globally requires a valid CSRF token on all unsafe methods (POST/PUT/PATCH/DELETE); safe methods (GET/HEAD/OPTIONS) are unaffected.
+- Added an `@app.errorhandler(CSRFError)` that re-renders the login page with a friendly message ("Your session expired or the form was invalid. Please try again.") and a 400 status, instead of Flask's raw 400 error page.
+- Changed the `logout` route from `@app.route("/logout")` (implicitly GET) to `@app.route("/logout", methods=["POST"])`, so logging out is itself a protected action and cannot be triggered by a cross-site GET.
+
+Where: templates (hidden token added to every POST form)
+
+- Added `<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">` inside all ten POST forms: `login.html`, `scan.html`, `item_stock.html`, `item_new.html`, `item_edit.html`, `user_new.html`, and the three inline forms in `admin_users.html` (deactivate, activate, delete).
+- `base.html`: the logout control was changed from a GET link (`<a href=...>`) to a small POST form with its own `csrf_token` field and a submit button.
+
+Where: `static/css/styles.css`
+
+- Added `.nav-logout-form` and `.nav-logout-form button` rules so the new logout button matches the look of the other navigation buttons (the global `form` styles would otherwise have distorted the nav layout).
+
+### 2. How It Was Done
+
+- Because the app uses hand-written HTML forms (not `FlaskForm`/WTForms classes), the `CSRFProtect` extension was the right fit: it enforces tokens app-wide without requiring every form to be rewritten as a form class. Each template only needed the one hidden `csrf_token` field that `Flask-WTF` exposes via the `csrf_token()` template helper.
+- Tokens are signed with the app's existing `SECRET_KEY`, so no new configuration was introduced; this also reinforces why a strong production `SECRET_KEY` (already required by the startup check) matters.
+- Logout was converted to POST so that it is covered by the same protection as every other state change, closing the one remaining GET-based state-changing endpoint.
+
+### 3. Why It Was Done This Way
+
+- CSRF tokens ensure a POST actually originated from a page the app served to this specific session, not from a malicious third-party page abusing the user's logged-in cookies. This directly addresses the "forged from another site" risk called out in the production-readiness analysis.
+- Enabling the global protection and adding the token to all forms had to happen in the same change: turning on `CSRFProtect` without the hidden fields would immediately break every form, so they were done together.
+- Rendering a clean message on `CSRFError` (rather than a raw 400) keeps the experience understandable when a token legitimately expires (for example, a form left open for a long time).
+
+### 4. Verification Performed
+
+- Ran `python -m py_compile app.py`; it compiled with no errors, and no linter errors were reported for the changed files.
+- Confirmed `Flask-WTF` (1.3.0) installs and imports in the project virtual environment.
+- Ran an end-to-end test through the Flask test client with CSRF fully enabled:
+  - `GET /login` renders a form containing a `csrf_token`.
+  - `POST /login` without a token is rejected with HTTP 400 (handled by the friendly CSRF error page); with the token it succeeds (HTTP 302 to the dashboard).
+  - `POST /scan` without a token is rejected with HTTP 400.
+  - The logout form on an authenticated page includes a token; `POST /logout` without a token is rejected (400) and with the token succeeds (302).
+  - `GET /logout` now returns HTTP 405 (method not allowed), confirming logout is POST-only.
+
+### Note For Future Testing
+
+With CSRF enabled, automated tests that POST through the Flask test client must either include a valid `csrf_token` (read from the rendered form) or set `app.config["WTF_CSRF_ENABLED"] = False` in a dedicated testing configuration. Production code was intentionally left with CSRF always on; no bypass flag was added to the app itself.
+
+### Current Result
+
+Every state-changing request in the app — login, scan, QR stock actions, item create/edit, user create/deactivate/activate/delete, and logout — now requires a valid CSRF token, so these actions can no longer be forged from another site. Legitimate use is unchanged: the forms carry the token automatically, and expired tokens produce a clear "please try again" message. All other login, item, detail, QR-image, label, transaction, admin, and CSV-export behavior is unchanged.
