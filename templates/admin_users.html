@@ -16,8 +16,9 @@
     <table>
         <thead>
             <tr>
-                <th>Institution ID</th>
                 <th>Name</th>
+                <th>Email</th>
+                <th>Institution ID</th>
                 <th>Role</th>
                 <th>Department</th>
                 <th>Status</th>
@@ -27,13 +28,14 @@
         <tbody>
             {% for user in users %}
             <tr>
-                <td>{{ user["institution_id"] }}</td>
                 <td>{{ user["name"] }}</td>
+                <td>{{ user["email"] or "Not set" }}</td>
+                <td>{{ user["institution_id"] or "Not set" }}</td>
                 <td>{{ user["role"] }}</td>
                 <td>{{ user["department"] or "Not set" }}</td>
                 <td>
                     {% if user["is_active"] %}
-                    Active
+                    Active{% if user["invite_pending"] %} (invited){% endif %}
                     {% else %}
                     Inactive
                     {% endif %}
@@ -46,10 +48,18 @@
                     {% elif not can_manage_user_role(user["role"]) %}
                     Protected
                     {% elif user["is_active"] %}
-                    <form class="inline-form" method="post" action="{{ url_for('admin_user_deactivate', user_id=user['id']) }}">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <button class="danger-button" type="submit">Deactivate</button>
-                    </form>
+                    <div class="action-group">
+                        {% if user["invite_pending"] %}
+                        <form class="inline-form" method="post" action="{{ url_for('admin_user_resend_invite', user_id=user['id']) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit">Resend invite</button>
+                        </form>
+                        {% endif %}
+                        <form class="inline-form" method="post" action="{{ url_for('admin_user_deactivate', user_id=user['id']) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button class="danger-button" type="submit">Deactivate</button>
+                        </form>
+                    </div>
                     {% else %}
                     <div class="action-group">
                         <form class="inline-form" method="post" action="{{ url_for('admin_user_activate', user_id=user['id']) }}">

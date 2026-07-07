@@ -1,12 +1,12 @@
-# Proposal: Barcode-Based Inventory Management System for Nursing Education and Healthcare Settings
+# Proposal: QR-Code-Based Inventory Management System for Nursing Education and Healthcare Settings
 
 ## 1. Project Overview
 
 Manual inventory management is still common in nursing academic programs, simulation labs, medication rooms, hospitals, and healthcare-related organizations. Many teams rely on paper notes, handwritten sign-out sheets, or Excel spreadsheets to track supplies. This process is time-consuming, prone to human error, difficult to audit, and often does not provide real-time visibility into current stock levels.
 
-This project proposes a low-cost, barcode-based inventory management system designed specifically for nursing education and healthcare training environments. The system will allow authorized users, such as students, faculty, lab coordinators, and staff, to log in using their student or faculty ID, scan item barcodes, and automatically update inventory records when items are added, removed, or restocked.
+This project delivers a low-cost, QR-code-based inventory management system designed specifically for nursing education and healthcare training environments. The system allows authorized users, such as students, faculty, lab coordinators, and staff, to sign in with an email and password, scan an item's QR code with any smartphone camera, and automatically update inventory records when items are added, removed, or restocked.
 
-The goal is to create a practical, affordable software solution that can run on minimal-cost hardware while replacing manual Excel-based tracking with a more accurate and automated workflow.
+The product is a hosted web application that is reachable from anywhere over the internet (its own domain, served over HTTPS), rather than a tool tied to a single institution's network. The goal is a practical, affordable, and secure software solution that replaces manual Excel-based tracking with an accurate, automated, and accountable workflow.
 
 ## 2. Problem Statement
 
@@ -23,26 +23,26 @@ These challenges can lead to supply shortages, wasted time, inaccurate records, 
 
 ## 3. Proposed Solution
 
-The proposed system will function similarly to a grocery-store checkout process, but adapted for nursing supplies and medication-room inventory. Each item type will receive a unique barcode. When users add or remove items, they will scan the barcode, enter the quantity, and submit the transaction. The system will automatically update the inventory database and maintain a clear activity log.
+The system works similarly to a grocery-store checkout process, but adapted for nursing supplies and medication-room inventory. Each item type receives a unique internal code and a matching QR code. The QR code encodes a direct link to that item's stock page. When a user points a phone camera at the label, the phone opens the item's stock page in the browser, where the user enters the quantity and submits an add or remove transaction. The system updates the inventory database and records a detailed activity log entry.
 
-The end product will be a lightweight software application that can run on affordable hardware such as:
+Because scanning is done with the camera in any smartphone or tablet, no dedicated USB barcode scanner is required. The end product is a lightweight web application that can run on affordable hardware and be accessed from:
 
-- A basic laptop or desktop computer.
-- A tablet or low-cost touchscreen device.
-- A USB barcode scanner or mobile-camera barcode scanner.
-- A local database with optional Excel/CSV export.
+- A basic laptop or desktop computer (web browser).
+- A tablet or phone (web browser + built-in camera for QR scanning).
+- A PostgreSQL database with Excel/CSV export.
 
 ## 4. Project Objectives
 
 The main objectives are to:
 
-- Replace manual spreadsheet-based inventory tracking with automated barcode scanning.
-- Allow students, faculty, and staff to log in using institutional IDs.
+- Replace manual spreadsheet-based inventory tracking with automated QR-code scanning.
+- Provide secure, individual accounts (email and password) with role-based permissions.
 - Track item additions, removals, and restocking activities in real time.
+- Capture lab-specific context on every transaction (lab instructor and topic of the day).
 - Maintain an accurate database of available inventory.
 - Generate exportable reports for auditing, planning, and supply ordering.
-- Support low-cost implementation using readily available hardware.
-- Build a clear prototype or minimum viable product by July 20, 2026.
+- Support low-cost implementation using devices already on hand (any camera phone).
+- Deliver a secure, hosted product suitable for launch as a commercial web application.
 
 ## 5. Target Users
 
@@ -52,213 +52,224 @@ The system is intended for:
 - Faculty members supervising lab or medication-room activities.
 - Simulation lab staff managing equipment and consumables.
 - Inventory or administrative staff responsible for restocking.
-- Healthcare training organizations that need simple supply tracking.
+- Healthcare training organizations that need simple, secure supply tracking.
 
 ## 6. Core Features
 
-### 6.1 User Login
+### 6.1 Authentication and User Accounts
 
-Users will log in using a student ID, faculty ID, or staff ID. The system will record the user associated with each inventory transaction.
+Users sign in with an **email address and password**. Passwords are never stored in plain text; they are salted and hashed. The system records the individual user associated with each inventory transaction.
+
+Account and session security includes:
+
+- **Invite-only account creation.** An administrator (or faculty, for students) creates an account by entering the person's name, email, and role. The system emails a secure, time-limited link, and the invited user chooses their own password. Administrators never set or see user passwords.
+- **Self-service password reset.** A "Forgot password?" link emails a signed, one-hour reset link. To avoid revealing which emails are registered, the same confirmation is shown whether or not the email exists.
+- **Session idle-timeout with a sliding window.** Sessions expire after a configurable period of inactivity (default 30 minutes) but are refreshed while the user is active, so no one is logged out mid-task. This protects shared lab computers.
+- **Re-authentication for destructive admin actions ("sudo mode").** Deactivating or deleting a user requires re-entering the password if the session has been idle.
+- **Brute-force cooldown.** Repeated failed logins for an email are temporarily locked out.
+- **CSRF protection** on every state-changing form.
 
 Recommended user roles:
 
-- **Student:** Can check out or return approved items.
-- **Faculty/Staff:** Can add items, remove items, adjust quantities, and review logs.
-- **Administrator:** Can manage users, item records, reports, and system settings.
+- **Student:** Can view items and record stock add/remove transactions.
+- **Faculty:** Everything a student can do, plus add/edit item records, generate QR codes and printable labels, and invite/manage student accounts.
+- **Administrator:** Everything faculty can do, plus manage all users (including faculty), review reports, and access system status.
 
 ### 6.2 Item Registration
 
-Authorized users can add new item types to the system. Each item record should include:
+Authorized users (faculty and administrators) can add new item types. Each item record includes:
 
 - Item name.
-- Category, such as medication-room supply, simulation supply, PPE, wound care, or equipment.
-- Barcode number.
-- Unit of measurement, such as pieces, boxes, packets, bottles, or kits.
+- Internal item code (auto-generated with a configurable prefix, e.g. `KATZ-NURS-000001`, or entered manually).
+- Bin location and room.
+- Company/supplier (optional).
+- Storage location (optional).
 - Current quantity.
 - Minimum stock threshold.
-- Location, such as medication room, skills lab, storage room, or simulation lab.
-- Optional notes, expiration date, or supplier information.
+- Expiration date (optional).
+- Notes (optional).
 
-### 6.3 Barcode Scanning
+### 6.3 QR Codes and Labels
 
-Each item type will be assigned a barcode. Users can scan the barcode when:
+Each item is assigned a unique internal code, and the system generates a matching **QR code** on demand:
+
+- A QR PNG image is available for every item (`/items/<code>/qr.png`).
+- A **printable label page** renders the item name, code, room, and bin location alongside the QR code, with a one-click browser print button.
+- The QR code encodes a direct URL to the item's stock page, so scanning it with a phone camera immediately opens the correct add/remove screen — no manual searching or typing.
+
+Users interact with the QR code when:
 
 - Adding new stock.
 - Removing items from inventory.
-- Returning unused items.
 - Checking current item details.
-
-The barcode scan will identify the item automatically and reduce manual typing.
 
 ### 6.4 Quantity Updates
 
-After scanning an item, the user will enter the quantity being added or removed. The system will update the inventory count immediately and store the transaction in the activity log.
+After opening an item (by scanning its QR code or browsing to it), the user selects Add Stock or Remove Stock, enters the quantity, and provides the required lab context (lab instructor and topic of the day) plus optional notes. The system updates the inventory count immediately and stores the transaction in the activity log. Removals are validated so a user cannot remove more than the quantity on hand.
+
+The same shared transaction logic powers both the QR/per-item stock page and the general scan page, so both behave identically.
 
 Example transactions:
 
 - Add 20 boxes of gloves.
 - Remove 5 IV start kits.
-- Return 2 unused dressing packs.
 - Adjust item count after a physical inventory check.
 
 ### 6.5 Automated Database and Spreadsheet Updates
 
-The system will maintain a database as the primary source of truth. Excel or CSV reports can be generated automatically when needed.
-
-This avoids the risk of multiple people manually editing the same spreadsheet while still allowing staff to download familiar spreadsheet-style reports.
+The PostgreSQL database is the single source of truth. Excel/CSV reports can be generated on demand. This avoids the risk of multiple people manually editing the same spreadsheet while still allowing staff to download familiar spreadsheet-style reports.
 
 ### 6.6 Inventory Dashboard
 
-The dashboard should show:
+The dashboard shows:
 
 - Total inventory items.
 - Low-stock items.
 - Recent transactions.
-- Most frequently used items.
-- Items nearing expiration, if expiration tracking is included.
-- Search and filter options by name, category, barcode, or location.
+- Search and filter options by name, code, or location.
 
 ### 6.7 Reporting
 
-Reports should support:
+Reports support:
 
 - Current stock levels.
 - Usage history by date range.
-- Transactions by user.
+- Transactions by user, lab instructor, or topic of the day.
 - Low-stock report.
-- Restocking needs.
 - Export to Excel or CSV.
 
-## 7. Suggested System Workflow
+## 7. System Workflow
 
 ### 7.1 Removing an Item
 
-1. User logs in using student, faculty, or staff ID.
-2. User selects "Remove Item."
-3. User scans the item barcode.
-4. System displays the item name and available quantity.
-5. User enters the quantity being removed.
-6. System updates inventory and records the transaction.
+1. User signs in with their email and password.
+2. User scans the item's QR code with a phone camera (or browses to the item), which opens the item's stock page.
+3. System displays the item name and available quantity.
+4. User selects "Remove Stock," enters the quantity, and fills in lab instructor, topic of the day, and any notes.
+5. System validates the quantity, updates inventory, and records the transaction with user, date, and time.
 
 ### 7.2 Adding or Restocking an Item
 
-1. Authorized user logs in.
-2. User selects "Add Stock."
-3. User scans the barcode or searches for the item.
-4. User enters the quantity being added.
-5. System updates the database.
-6. System records the date, time, user, item, and quantity.
+1. Authorized user signs in.
+2. User scans the QR code or searches for the item.
+3. User selects "Add Stock" and enters the quantity plus lab context.
+4. System updates the database and records the date, time, user, item, and quantity.
 
 ### 7.3 Registering a New Item
 
-1. Faculty, staff, or administrator logs in.
-2. User selects "New Item."
-3. User enters item details.
-4. System assigns or records a barcode.
-5. Barcode label can be printed and attached to the item shelf, bin, or package.
+1. Faculty or administrator signs in.
+2. User selects "New Item" and enters item details.
+3. System assigns (or accepts) an internal item code.
+4. The user opens the item's printable label page and prints the QR label, which is attached to the shelf, bin, or package.
 
-## 8. Minimum Viable Product Scope
+## 8. Product Scope and Status
 
-For the first version, the system should focus on the essential functions needed to demonstrate value by July 20, 2026.
+The core workflow is implemented and verified: secure authentication, item management, QR generation and labels, QR-driven stock updates, transaction history, inventory views, and CSV/Excel export.
 
-Recommended MVP features:
+Delivered features:
 
-- Login using a user ID.
-- Add new item records.
-- Assign or enter barcode values.
-- Scan barcode to find an item.
-- Add stock quantity.
-- Remove stock quantity.
-- Maintain transaction history.
-- Show current inventory table.
-- Export inventory or transaction records to CSV/Excel.
-- Display low-stock warnings.
+- Email/password login with hashed passwords and role-based access.
+- Invite-based account creation and self-service password reset via email links.
+- Session idle-timeout, admin re-authentication, login lockout, and CSRF protection.
+- Add/edit item records with auto-generated internal codes.
+- On-demand QR code images and printable QR labels.
+- QR-driven add/remove stock with required lab-context capture.
+- Transaction history with user, date/time, instructor, topic, and notes.
+- Current inventory table and low-stock view.
+- CSV/Excel export of inventory and transactions.
+- An automated authentication test suite (pytest).
 
-Features that can be added after the MVP:
+Features that can be added next:
 
 - Expiration-date alerts.
-- Supplier management.
-- Purchase-order generation.
-- Email notifications.
-- Integration with institutional login systems.
-- Multi-room or multi-campus inventory tracking.
-- Mobile app version.
+- Supplier management and purchase-order generation.
+- Rate limiting backed by a shared store (Redis) for multi-worker deployments.
+- Multi-room or multi-campus (multi-tenant) inventory tracking.
 - Advanced analytics dashboard.
+- Native mobile app (the current web app already supports phone-camera scanning).
 
-## 9. Recommended Technical Approach
+## 9. Technical Approach
 
-The system can be built as a lightweight web application that runs locally on a small computer or on an internal network.
+The system is a web application that runs behind a domain over HTTPS and can be hosted on a small server or managed platform.
 
-Recommended software structure:
+Software structure:
 
-- **Frontend:** Simple web interface for login, scanning, item management, inventory table, and reports.
-- **Backend:** Application server that handles user actions, barcode lookups, inventory updates, and reports.
-- **Database:** PostgreSQL, a free and open-source relational database suitable for both local prototyping and production deployment.
-- **Barcode scanner:** USB barcode scanner acting like a keyboard input, or a camera-based scanner for tablets.
+- **Frontend:** Server-rendered web interface (Jinja2 templates) for login, item management, QR labels, stock updates, inventory tables, and reports.
+- **Backend:** Flask application server handling authentication, item lookups, QR generation, inventory updates, and reports.
+- **Database:** PostgreSQL, a free and open-source relational database suitable for both local prototyping and production.
+- **QR codes:** Generated server-side with the `qrcode` library; scanned with any smartphone/tablet camera (no dedicated hardware).
+- **Security libraries:** Flask-WTF (CSRF), Werkzeug (password hashing), and `itsdangerous` (signed, time-limited invite/reset tokens).
+- **Serving:** Gunicorn behind a reverse proxy that terminates TLS.
 - **Export:** CSV and Excel-compatible reports.
 
-This approach keeps the project affordable while still allowing future expansion.
+This approach keeps the project affordable while supporting a secure, publicly reachable deployment.
 
 ## 10. Data to Track
 
-The database should include the following core records:
+The database includes the following core records (as implemented).
 
 ### Users
 
-- User ID.
+- ID.
+- Email (unique, used for login).
+- Password hash (null while an invite is pending).
 - Name.
-- Role.
-- Department or program.
+- Role (student, faculty, administrator).
+- Department (optional).
+- Institution ID (optional; no longer used for login).
 - Active/inactive status.
+- Created-at and last-login timestamps.
 
 ### Items
 
 - Item ID.
-- Barcode.
+- Internal code (unique; used to build the QR link).
 - Item name.
-- Category.
-- Unit type.
+- Bin location and room.
+- Company/supplier (optional).
+- Storage location (optional).
 - Current quantity.
 - Minimum stock quantity.
-- Location.
-- Expiration date, if applicable.
-- Notes.
+- Expiration date (optional).
+- Notes (optional).
 
 ### Transactions
 
 - Transaction ID.
 - User ID.
 - Item ID.
-- Transaction type: added, removed, returned, adjusted.
+- Transaction type: add or remove.
 - Quantity.
 - Date and time.
-- Notes or reason, if needed.
+- Lab instructor.
+- Topic of the day.
+- Notes.
 
 ## 11. Security and Accountability
 
-Because this system may be used in medication-room or healthcare training environments, it should include basic accountability features:
+Because this system may be used in medication-room or healthcare training environments and is reachable over the public internet, it includes the following safeguards:
 
-- Login required before any inventory action.
-- Role-based permissions for students, faculty, staff, and administrators.
-- Transaction history that cannot be casually deleted by regular users.
-- Clear record of who added or removed each item.
-- Optional administrator review for manual quantity adjustments.
-
-For the MVP, the system should be treated as an educational or training inventory tool unless additional compliance requirements are formally defined.
+- Login required before any inventory action; no account can log in without a verified, hashed password.
+- Role-based permissions for students, faculty, and administrators.
+- Invite-only account creation; passwords are chosen by the user via a secure link and never set or seen by administrators.
+- Self-service password reset with signed, time-limited links.
+- CSRF protection on every state-changing form.
+- Session idle-timeout with activity-based refresh, plus re-authentication for destructive admin actions.
+- Brute-force cooldown after repeated failed logins.
+- HTTPS/TLS in production, with secure session cookies and a strong, environment-provided secret key.
+- Transaction history that records who added or removed each item, when, and in what lab context, and that regular users cannot casually delete.
 
 ## 12. Timeline
 
 Deadline: **July 20, 2026**
 
-The timeline below assumes work begins immediately and focuses on delivering a working prototype by the deadline.
-
 | Phase | Dates | Deliverables |
 |---|---:|---|
-| Phase 1: Requirements and Design | June 11 - June 16 | Finalize item categories, user roles, workflow, database fields, and hardware assumptions |
-| Phase 2: Prototype Setup | June 17 - June 23 | Create application structure, database, login screen, and basic inventory table |
-| Phase 3: Barcode and Inventory Workflow | June 24 - July 1 | Implement barcode lookup, add stock, remove stock, and transaction logging |
-| Phase 4: Reports and Dashboard | July 2 - July 8 | Add low-stock view, recent activity, inventory reports, and CSV/Excel export |
-| Phase 5: Testing and Refinement | July 9 - July 15 | Test with sample nursing supplies, fix errors, improve usability, and validate workflows |
+| Phase 1: Requirements and Design | June 11 - June 16 | Finalize item fields, user roles, workflow, database schema, and hosting assumptions |
+| Phase 2: Prototype Setup | June 17 - June 23 | Application structure, database, login screen, and basic inventory table |
+| Phase 3: QR and Inventory Workflow | June 24 - July 1 | Item detail page, QR image route, printable label page, QR-driven stock page, and shared transaction logging |
+| Phase 4: Reports and Dashboard | July 2 - July 8 | Low-stock view, recent activity, inventory reports, and CSV/Excel export |
+| Phase 5: Security Hardening | July 9 - July 15 | Real authentication (email/password), invites, password reset, CSRF, session timeout, admin re-auth, lockout, and automated tests |
 | Phase 6: Final Proposal and Demo Preparation | July 16 - July 20 | Prepare demo, documentation, final proposal, and presentation-ready summary |
 
 ## 13. Expected Benefits
@@ -268,73 +279,70 @@ The completed system is expected to:
 - Reduce manual data entry.
 - Improve inventory accuracy.
 - Save time for faculty and staff.
-- Create accountability for supply usage.
+- Create per-user accountability for supply usage.
 - Help prevent unexpected supply shortages.
 - Make restocking decisions easier.
 - Provide professional reports for planning and auditing.
-- Offer a scalable foundation for future healthcare inventory automation.
+- Offer a secure, scalable foundation for future healthcare inventory automation.
 
 ## 14. Cost Considerations
 
-The project is designed to minimize cost by using:
+The project minimizes cost by using:
 
-- Existing computers or tablets when available.
-- A low-cost USB barcode scanner.
-- Barcode labels that can be printed using standard label sheets or a small label printer.
-- Open-source or low-cost software tools.
-- Local database storage for the first version.
+- Existing computers, tablets, or phones (the phone camera is the QR scanner — no dedicated hardware).
+- QR labels printed on standard label sheets or a small label printer.
+- Open-source software tools.
+- PostgreSQL (no license cost).
+- Affordable web hosting with a managed TLS certificate.
 
-Estimated hardware options:
+Estimated cost options:
 
 | Item | Low-Cost Option |
 |---|---:|
-| Computer or tablet | Existing device if available |
-| USB barcode scanner | Approximately $20-$50 |
-| Barcode labels | Standard printable labels or label printer |
-| Database | PostgreSQL, free and open source, no license cost |
-| Software hosting | Local machine or internal network |
+| Computer, tablet, or phone | Existing device if available |
+| QR scanning hardware | None required (built-in camera) |
+| QR labels | Standard printable labels or label printer |
+| Database | PostgreSQL, free and open source |
+| Software hosting | Small server or managed platform with HTTPS |
 
 ## 15. Risks and Mitigation
 
 | Risk | Mitigation |
 |---|---|
-| Users forget to scan items | Keep scanning workflow simple and place scanner near supplies |
-| Barcode labels become damaged | Print backup labels and attach barcodes to shelves or bins |
+| Users forget to scan items | Keep the scan-to-stock workflow one step; print QR labels and place them on the bins |
+| QR labels become damaged | Reprint labels on demand from the item's label page; also attach labels to shelves/bins |
 | Inventory count becomes inaccurate | Include periodic physical count and adjustment workflow |
 | Staff need Excel reports | Provide CSV/Excel export rather than removing spreadsheet access completely |
-| Scope becomes too large before July 20 | Focus first on MVP features and defer advanced integrations |
-| Medication-related compliance is unclear | Position MVP as an educational inventory system until formal compliance rules are reviewed |
+| Public exposure invites attacks | Enforce HTTPS, CSRF, hashed passwords, session timeout, and login lockout (implemented) |
+| Scope becomes too large | Focus first on the core workflow and defer advanced integrations |
+| Medication-related compliance is unclear | Position the product as an educational inventory system until formal compliance rules are reviewed |
 
 ## 16. Success Criteria
 
-The project will be considered successful if, by July 20, 2026:
+The project is considered successful if:
 
-- A user can log in using an ID.
-- A new item can be registered with a barcode.
-- An item can be scanned and identified by the system.
-- Inventory quantities can be increased or decreased.
+- A user can sign in securely with an email and password.
+- A new item can be registered and given an internal code and QR label.
+- An item can be identified by scanning its QR code with a phone.
+- Inventory quantities can be increased or decreased with lab context captured.
 - The database updates automatically after each transaction.
-- A transaction log records user, item, quantity, date, and action.
+- A transaction log records user, item, quantity, date, time, instructor, and topic.
 - Current inventory can be exported to CSV or Excel format.
-- The system can be demonstrated using realistic nursing or medication-room supplies.
+- The system can be demonstrated using realistic nursing or medication-room supplies over a live, HTTPS-served domain.
 
 ## 17. Future Expansion
 
-After the initial prototype, the system can be expanded to include:
+After the initial product, the system can be expanded to include:
 
-- Integration with institutional single sign-on.
-- Cloud synchronization.
-- Mobile barcode scanning.
-- QR code support.
-- Expiration-date monitoring.
-- Automated reorder suggestions.
-- Role-specific dashboards.
-- Multi-location inventory tracking.
-- Audit reports for administrators.
+- Cloud synchronization and multi-tenant (multi-institution) support.
+- Native mobile app.
+- Expiration-date monitoring and automated reorder suggestions.
+- Role-specific dashboards and advanced audit reports.
 - Integration with purchasing systems.
+- Shared-store rate limiting for large multi-worker deployments.
 
 ## 18. Conclusion
 
-This project proposes a practical and affordable inventory management system for nursing education and healthcare-related environments. By using barcode scanning, user login, automated database updates, and exportable reports, the system can significantly reduce manual spreadsheet work and improve accuracy, accountability, and supply readiness.
+This project delivers a practical, affordable, and secure inventory management system for nursing education and healthcare-related environments. By combining QR-code scanning, individual email/password accounts, automated database updates, and exportable reports, the system significantly reduces manual spreadsheet work and improves accuracy, accountability, and supply readiness.
 
-The recommended first step is to build a focused MVP by July 20, 2026. This MVP should demonstrate the complete core workflow: logging in, scanning an item, adding or removing quantities, updating inventory automatically, and producing reports. Once the prototype is validated, the system can be expanded into a more robust platform for broader academic, simulation, and healthcare inventory use.
+The core workflow — signing in securely, scanning an item's QR code, adding or removing quantities with lab context, updating inventory automatically, and producing reports — is implemented and verified. With authentication and session hardening in place, the system is positioned to move from prototype to a hosted product suitable for launch, and can be expanded into a broader platform for academic, simulation, and healthcare inventory use.

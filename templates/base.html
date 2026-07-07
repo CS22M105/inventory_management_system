@@ -24,7 +24,7 @@
         {% block navigation %}
         {% if session.get("user_id") %}
         <nav>
-            {% if session.get("user_role") in ["administrator", "faculty"] and session.get("login_mode") in ["admin", "faculty"] %}
+            {% if session.get("user_role") in ["administrator", "faculty"] %}
             <a href="{{ url_for('dashboard') }}">Home</a>
             <a href="{{ url_for('admin_users') }}">Manage Users</a>
             <details class="nav-dropdown">
@@ -38,7 +38,7 @@
             </details>
             <a href="{{ url_for('transactions') }}">Transaction History</a>
             <a href="{{ url_for('export_inventory') }}">Export CSV</a>
-            {% if session.get("user_role") == "administrator" and session.get("login_mode") == "admin" %}
+            {% if session.get("user_role") == "administrator" %}
             <a href="{{ url_for('db_status') }}">Database Status</a>
             {% endif %}
             {% else %}

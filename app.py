@@ -1,5 +1,7 @@
 from flask import Flask, Response, abort, g, redirect, render_template, request, session, url_for
 from flask_wtf.csrf import CSRFProtect, CSRFError
+from werkzeug.security import generate_password_hash, check_password_hash
+from itsdangerous import URLSafeTimedSerializer, BadData
 import csv
 import io
 import os
@@ -7,13 +9,14 @@ import psycopg2
 import qrcode
 from psycopg2.extras import RealDictCursor
 import click
+import time
+from datetime import timedelta
 from pathlib import Path
 
 # holds the parent path to the current script we are running.
 BASE_DIR = Path(__file__).resolve().parent
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://localhost/inventory_management_system")
 ELEVATED_ROLES = {"administrator", "faculty"}
-ELEVATED_LOGIN_MODES = {"admin", "faculty"}
 SCHEMA = BASE_DIR / "schema.sql"
 APP_ENV = os.environ.get("APP_ENV", "development").lower()
 SECRET_KEY = os.environ.get("SECRET_KEY")
@@ -22,6 +25,27 @@ SECRET_KEY = os.environ.get("SECRET_KEY")
 APP_BASE_URL = os.environ.get("APP_BASE_URL")
 # Prefix for auto-generated internal item codes (e.g. KATZ-NURS-000014).
 BARCODE_PREFIX = os.environ.get("BARCODE_PREFIX", "KATZ-NURS")
+# Minimum length enforced for account passwords (see validate_password_strength).
+MIN_PASSWORD_LENGTH = 8
+# Lifetimes (in seconds) for signed invite and password-reset links.
+INVITE_TOKEN_MAX_AGE = 72 * 60 * 60   # 72 hours
+RESET_TOKEN_MAX_AGE = 60 * 60         # 1 hour
+# Transactional email provider selector. Unset (the default) means "no provider
+# configured": send_email() logs the message so invite/reset flows are testable
+# locally. A real provider (SES/SendGrid/SMTP/...) is wired up at deploy time.
+EMAIL_PROVIDER = os.environ.get("EMAIL_PROVIDER")
+# Sessions expire after this many minutes of inactivity; each request slides the
+# window forward so active users are not logged out mid-task (see below).
+SESSION_IDLE_MINUTES = int(os.environ.get("SESSION_IDLE_MINUTES", "30"))
+# Destructive admin actions require a fresh password re-entry ("sudo mode").
+# A successful login or re-auth stays valid for this many seconds.
+SUDO_MODE_MAX_AGE = int(os.environ.get("SUDO_MODE_MAX_AGE", "300"))
+# Simple per-process brute-force cooldown: after this many consecutive failed
+# logins for an email, further attempts are refused for LOGIN_LOCKOUT_SECONDS.
+# This is a lightweight safety net; Step D (Flask-Limiter) is the robust,
+# shared-store defense across multiple workers/hosts.
+LOGIN_MAX_ATTEMPTS = int(os.environ.get("LOGIN_MAX_ATTEMPTS", "5"))
+LOGIN_LOCKOUT_SECONDS = int(os.environ.get("LOGIN_LOCKOUT_SECONDS", "300"))
 
 app = Flask(__name__)
 if APP_ENV == "production" and not SECRET_KEY:
@@ -31,6 +55,13 @@ app.config["SECRET_KEY"] = SECRET_KEY or "dev-secret-key-change-before-productio
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["SESSION_COOKIE_SECURE"] = APP_ENV == "production"
+# Idle-timeout: signed session cookies are only accepted within this window.
+# SESSION_REFRESH_EACH_REQUEST re-issues the cookie (with a fresh timestamp) on
+# every response, so the window slides forward while a user is active and only
+# expires after SESSION_IDLE_MINUTES of true inactivity. Sessions are marked
+# permanent at login so this lifetime applies.
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(minutes=SESSION_IDLE_MINUTES)
+app.config["SESSION_REFRESH_EACH_REQUEST"] = True
 
 # CSRF protection for every state-changing (POST/PUT/PATCH/DELETE) request.
 # Each form must include the hidden csrf_token field (see templates). Tokens
@@ -118,9 +149,182 @@ def generate_next_item_barcode(db):
     number = db.execute("SELECT nextval('item_barcode_number_seq') AS number").fetchone()["number"]
     return f"{BARCODE_PREFIX}-{number:06d}"
 
+def ensure_auth_columns(db):
+    # Runtime safety for databases created before email/password authentication
+    # existed. Fresh databases get these from schema.sql; this upgrades older
+    # ones in place without dropping data. Safe to call repeatedly.
+    #
+    # Note: the email column is added as nullable here (existing rows have no
+    # email yet), while schema.sql defines it NOT NULL for fresh installs. The
+    # unique index reuses PostgreSQL's default constraint index name
+    # (users_email_key) so a fresh database that already has the UNIQUE
+    # constraint is left untouched.
+    db.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT")
+    db.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT")
+    db.execute(
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP"
+    )
+    db.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP")
+    db.execute("ALTER TABLE users ALTER COLUMN institution_id DROP NOT NULL")
+    db.execute("CREATE UNIQUE INDEX IF NOT EXISTS users_email_key ON users (email)")
+    db.commit()
+
+def hash_password(raw_password):
+    # Werkzeug salts and hashes the password (PBKDF2 by default). The raw
+    # password is never stored.
+    return generate_password_hash(raw_password)
+
+def verify_password(password_hash, raw_password):
+    # A NULL/empty hash means the user was invited but has not set a password
+    # yet, so they cannot authenticate.
+    if not password_hash:
+        return False
+    return check_password_hash(password_hash, raw_password)
+
+def validate_password_strength(raw_password):
+    # Returns an error message string, or None if the password is acceptable.
+    if not raw_password or len(raw_password) < MIN_PASSWORD_LENGTH:
+        return f"Password must be at least {MIN_PASSWORD_LENGTH} characters."
+    return None
+
+# In-memory failed-login tracker keyed by email. Per-process only (resets on
+# restart and is not shared across workers) — intentionally a lightweight
+# cooldown, not the primary brute-force defense (that is Step D / Flask-Limiter).
+_login_attempts = {}
+
+def is_locked_out(email):
+    record = _login_attempts.get(email)
+    if not record:
+        return False
+    locked_until = record.get("locked_until")
+    if locked_until is None:
+        return False
+    if time.time() < locked_until:
+        return True
+    # Cooldown elapsed: forget the email so it starts fresh.
+    _login_attempts.pop(email, None)
+    return False
+
+def record_failed_login(email):
+    record = _login_attempts.setdefault(email, {"count": 0, "locked_until": None})
+    record["count"] += 1
+    if record["count"] >= LOGIN_MAX_ATTEMPTS:
+        record["locked_until"] = time.time() + LOGIN_LOCKOUT_SECONDS
+
+def clear_failed_login(email):
+    # Called on a successful login so a legitimate user is not penalized for
+    # earlier typos.
+    _login_attempts.pop(email, None)
+
+def get_token_serializer():
+    # Tokens are signed with SECRET_KEY. Rotating SECRET_KEY invalidates every
+    # outstanding invite/reset link, which is the desired safety behavior.
+    return URLSafeTimedSerializer(app.config["SECRET_KEY"])
+
+def make_token(user_id, purpose):
+    # Build a signed, self-describing token for a one-off action link. The
+    # purpose ("invite" or "reset") is embedded so a token minted for one flow
+    # cannot be replayed against another.
+    return get_token_serializer().dumps({"user_id": user_id, "purpose": purpose})
+
+def read_token(token, purpose, max_age):
+    # Return the user_id if the token is valid, unexpired, and was minted for
+    # this exact purpose; otherwise return None. Any tampering, expiry, or
+    # purpose mismatch is treated the same way (rejected).
+    try:
+        data = get_token_serializer().loads(token, max_age=max_age)
+    except BadData:
+        return None
+
+    if not isinstance(data, dict) or data.get("purpose") != purpose:
+        return None
+
+    return data.get("user_id")
+
+def send_email(to, subject, body):
+    # Deliver a transactional email (invite / password reset). Returns True when
+    # the message was handed off.
+    #
+    # No provider configured (development): log the full message so the link is
+    # visible in the server console and flows can be tested without external mail.
+    #
+    # Provider configured (production): a real integration must be wired here.
+    # We raise instead of silently succeeding so a misconfigured production
+    # deployment fails loudly rather than dropping invite/reset mail.
+    if EMAIL_PROVIDER:
+        raise NotImplementedError(
+            f"EMAIL_PROVIDER={EMAIL_PROVIDER!r} is set but no email provider "
+            "integration is wired up yet."
+        )
+
+    app.logger.info(
+        "DEV EMAIL (not actually sent)\nTo: %s\nSubject: %s\n\n%s",
+        to,
+        subject,
+        body,
+    )
+    return True
+
+def send_invite(user_id, email):
+    # Email a "set your password" link for a newly created or re-invited user.
+    # Must be called within a request context (uses the request host as a
+    # fallback base URL, mirroring the QR-code link builder).
+    token = make_token(user_id, "invite")
+    base_url = APP_BASE_URL or request.host_url.rstrip("/")
+    link = f"{base_url}{url_for('set_password', token=token)}"
+    send_email(
+        email,
+        "Set your Katz Nursing Inventory password",
+        "You have been invited to the Katz Nursing Inventory system.\n\n"
+        f"Set your password using this link (valid for 72 hours):\n{link}\n",
+    )
+
+def send_reset(user_id, email):
+    # Email a password-reset link. Must be called within a request context.
+    token = make_token(user_id, "reset")
+    base_url = APP_BASE_URL or request.host_url.rstrip("/")
+    link = f"{base_url}{url_for('reset_password', token=token)}"
+    send_email(
+        email,
+        "Reset your Katz Nursing Inventory password",
+        "We received a request to reset your password.\n\n"
+        f"Reset it using this link (valid for 1 hour):\n{link}\n\n"
+        "If you did not request this, you can ignore this email.\n",
+    )
+
 def require_login():
     if "user_id" not in session:
         return redirect(url_for("login"))
+
+    return None
+
+def mark_sudo():
+    # Record that the user proved their password just now (login or re-auth).
+    session["sudo_at"] = int(time.time())
+
+def has_fresh_sudo():
+    sudo_at = session.get("sudo_at")
+    if sudo_at is None:
+        return False
+    return (time.time() - sudo_at) <= SUDO_MODE_MAX_AGE
+
+def safe_next(target, fallback_endpoint="admin_users"):
+    # Only allow same-site relative paths as post-re-auth redirect targets, so
+    # the ?next= parameter cannot be used for an open redirect.
+    if target and target.startswith("/") and not target.startswith("//"):
+        return target
+    return url_for(fallback_endpoint)
+
+def require_sudo():
+    # Gate a destructive action behind a recent password re-entry. Returns a
+    # redirect (to login or the re-auth page) when the caller must stop, or None
+    # when the action may proceed.
+    login_redirect = require_login()
+    if login_redirect is not None:
+        return login_redirect
+
+    if not has_fresh_sudo():
+        return redirect(url_for("reauth", next=url_for("admin_users")))
 
     return None
 
@@ -130,7 +334,7 @@ def require_admin():
     if login_redirect is not None:
         return login_redirect
 
-    if session.get("user_role") not in ELEVATED_ROLES or session.get("login_mode") not in ELEVATED_LOGIN_MODES:
+    if session.get("user_role") not in ELEVATED_ROLES:
         return redirect(url_for("dashboard"))
 
     return None
@@ -141,7 +345,7 @@ def require_system_admin():
     if login_redirect is not None:
         return login_redirect
 
-    if session.get("user_role") != "administrator" or session.get("login_mode") != "admin":
+    if session.get("user_role") != "administrator":
         return redirect(url_for("dashboard"))
 
     return None
@@ -158,10 +362,10 @@ def require_item_manager():
     return None
 
 def allowed_user_roles_to_manage():
-    if session.get("user_role") == "administrator" and session.get("login_mode") == "admin":
+    if session.get("user_role") == "administrator":
         return {"student", "faculty"}
 
-    if session.get("user_role") == "faculty" and session.get("login_mode") == "faculty":
+    if session.get("user_role") == "faculty":
         return {"student"}
 
     return set()
@@ -223,10 +427,34 @@ def init_db_command():
 
     db.commit()
 
-    # Runtime safety for databases initialized before this feature existed.
+    # Runtime safety for databases initialized before these features existed.
     ensure_barcode_sequence(db)
+    ensure_auth_columns(db)
 
     click.echo("Initialized the PostgreSQL inventory database.")
+
+@app.cli.command("set-password")
+@click.argument("email")
+@click.argument("password")
+def set_password_command(email, password):
+    """Set (or reset) a user's password by email. Used to bootstrap accounts."""
+    db = get_db()
+    ensure_auth_columns(db)
+
+    error = validate_password_strength(password)
+    if error:
+        raise click.ClickException(error)
+
+    cursor = db.execute(
+        "UPDATE users SET password_hash = %s WHERE email = %s",
+        (hash_password(password), email),
+    )
+    db.commit()
+
+    if cursor.rowcount == 0:
+        raise click.ClickException(f"No user found with email {email}.")
+
+    click.echo(f"Password set for {email}.")
 
 @app.route("/")
 def home():
@@ -235,42 +463,57 @@ def home():
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        institution_id = request.form.get("institution_id", "").strip()
-        login_mode = request.form.get("login_mode", "user").strip()
+        email = request.form.get("email", "").strip().lower()
+        password = request.form.get("password", "")
+
+        # Refuse further attempts once an email has failed too many times in a
+        # row, until the cooldown elapses. Generic message, no enumeration.
+        if is_locked_out(email):
+            return render_template(
+                "login.html",
+                error="Too many failed attempts. Please try again later.",
+            ), 429
+
         db = get_db()
+        ensure_auth_columns(db)
         user = db.execute(
             """
-            SELECT id, institution_id, name, role
+            SELECT id, email, name, role, password_hash
             FROM users
-            WHERE institution_id = %s AND is_active = TRUE
+            WHERE LOWER(email) = %s AND is_active = TRUE
             """,
-            (institution_id,),
+            (email,),
         ).fetchone()
 
-        if user is None:
+        # One generic message for every failure (unknown email, wrong password,
+        # inactive account, or an invited user who has not set a password yet)
+        # so we never reveal which emails are registered.
+        if user is None or not verify_password(user["password_hash"], password):
+            record_failed_login(email)
             return render_template(
                 "login.html",
-                error="You are not registered. Contact your administrator to register.",
+                error="Invalid email or password.",
             ), 401
 
-        if login_mode == "admin" and user["role"] != "administrator":
-            return render_template(
-                "login.html",
-                error="You are not registered as an administrator. Contact your administrator for access.",
-            ), 403
+        clear_failed_login(email)
 
-        if login_mode == "faculty" and user["role"] != "faculty":
-            return render_template(
-                "login.html",
-                error="You are not registered as faculty. Contact your administrator for access.",
-            ), 403
+        db.execute(
+            "UPDATE users SET last_login_at = CURRENT_TIMESTAMP WHERE id = %s",
+            (user["id"],),
+        )
+        db.commit()
 
+        # Clear any existing session data before establishing the new one to
+        # avoid session fixation. Privileges derive solely from the account role.
         session.clear()
+        # Mark permanent so PERMANENT_SESSION_LIFETIME (idle timeout) applies.
+        session.permanent = True
         session["user_id"] = user["id"]
-        session["institution_id"] = user["institution_id"]
         session["user_name"] = user["name"]
         session["user_role"] = user["role"]
-        session["login_mode"] = login_mode
+        session["email"] = user["email"]
+        # A fresh login counts as a recent password proof for "sudo mode".
+        mark_sudo()
 
         return redirect(url_for("dashboard"))
 
@@ -280,6 +523,97 @@ def login():
 def logout():
     session.clear()
     return redirect(url_for("login"))
+
+@app.route("/reauth", methods=["GET", "POST"])
+def reauth():
+    # Confirm the logged-in user's password before a destructive admin action
+    # ("sudo mode"). This protects shared/lab computers where a session may be
+    # left open.
+    login_redirect = require_login()
+    if login_redirect is not None:
+        return login_redirect
+
+    next_url = safe_next(request.values.get("next"))
+
+    if request.method == "POST":
+        password = request.form.get("password", "")
+        db = get_db()
+        ensure_auth_columns(db)
+        user = db.execute(
+            "SELECT password_hash FROM users WHERE id = %s AND is_active = TRUE",
+            (session.get("user_id"),),
+        ).fetchone()
+
+        if user is None or not verify_password(user["password_hash"], password):
+            return render_template(
+                "reauth.html",
+                next=next_url,
+                error="Incorrect password.",
+            ), 401
+
+        mark_sudo()
+        return redirect(next_url)
+
+    return render_template("reauth.html", next=next_url)
+
+@app.route("/forgot-password", methods=["GET", "POST"])
+def forgot_password():
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+        db = get_db()
+        ensure_auth_columns(db)
+        user = db.execute(
+            "SELECT id, email FROM users WHERE LOWER(email) = %s AND is_active = TRUE",
+            (email,),
+        ).fetchone()
+
+        if user is not None:
+            send_reset(user["id"], user["email"])
+
+        # Always show the same confirmation, whether or not the email matched a
+        # real account, so the form cannot be used to discover registered emails.
+        return render_template("forgot_password.html", sent=True)
+
+    return render_template("forgot_password.html")
+
+@app.route("/reset-password/<token>", methods=["GET", "POST"])
+def reset_password(token):
+    # No login required: the signed "reset" token is the credential.
+    user_id = read_token(token, "reset", RESET_TOKEN_MAX_AGE)
+
+    if user_id is None:
+        return render_template("reset_password.html", invalid=True), 400
+
+    db = get_db()
+    ensure_auth_columns(db)
+    user = db.execute(
+        "SELECT id, email FROM users WHERE id = %s AND is_active = TRUE",
+        (user_id,),
+    ).fetchone()
+
+    if user is None:
+        return render_template("reset_password.html", invalid=True), 400
+
+    if request.method == "POST":
+        password = request.form.get("password", "")
+        confirm_password = request.form.get("confirm_password", "")
+
+        error = validate_password_strength(password)
+        if not error and password != confirm_password:
+            error = "Passwords do not match."
+
+        if error:
+            return render_template("reset_password.html", token=token, error=error), 400
+
+        db.execute(
+            "UPDATE users SET password_hash = %s WHERE id = %s",
+            (hash_password(password), user["id"]),
+        )
+        db.commit()
+
+        return redirect(url_for("login"))
+
+    return render_template("reset_password.html", token=token)
 
 @app.route("/dashboard")
 def dashboard():
@@ -1006,10 +1340,12 @@ def admin_users():
         SELECT
             id,
             institution_id,
+            email,
             name,
             role,
             department,
             is_active,
+            password_hash IS NULL AS invite_pending,
             (
                 SELECT COUNT(*)
                 FROM transactions
@@ -1042,39 +1378,112 @@ def admin_user_new():
 
     if request.method == "POST":
         institution_id = request.form.get("institution_id", "").strip()
+        email = request.form.get("email", "").strip().lower()
         name = request.form.get("name", "").strip()
         role = request.form.get("role", "").strip()
         department = request.form.get("department", "").strip()
 
-        if not institution_id or not name or role not in allowed_roles:
+        if not email or not name or role not in allowed_roles:
             return render_template(
                 "user_new.html",
-                error="Institution ID, name, and an allowed role are required.",
+                error="Name, email, and an allowed role are required.",
                 role_options=role_options,
             ), 400
 
         db = get_db()
+        ensure_auth_columns(db)
 
         try:
-            db.execute(
+            # password_hash is left NULL: the account is "invited" until the
+            # user sets a password via the emailed link. institution_id is
+            # optional, so store NULL (not "") when blank to avoid collisions.
+            new_user = db.execute(
                 """
-                INSERT INTO users (institution_id, name, role, department)
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO users (institution_id, email, name, role, department)
+                VALUES (%s, %s, %s, %s, %s)
+                RETURNING id
                 """,
-                (institution_id, name, role, department),
-            )
+                (institution_id or None, email, name, role, department),
+            ).fetchone()
             db.commit()
         except psycopg2.IntegrityError:
             db.rollback()
             return render_template(
                 "user_new.html",
-                error="A user with this Institution ID already exists.",
+                error="A user with this email or institution ID already exists.",
                 role_options=role_options,
             ), 400
 
+        send_invite(new_user["id"], email)
         return redirect(url_for("admin_users"))
 
     return render_template("user_new.html", role_options=role_options)
+
+@app.route("/set-password/<token>", methods=["GET", "POST"])
+def set_password(token):
+    # No login required: the signed "invite" token is the credential. The
+    # password-reset flow (A5) is a separate route with its own "reset" token,
+    # so an invite link cannot be used as a reset link or vice versa.
+    user_id = read_token(token, "invite", INVITE_TOKEN_MAX_AGE)
+
+    if user_id is None:
+        return render_template("set_password.html", invalid=True), 400
+
+    db = get_db()
+    ensure_auth_columns(db)
+    user = db.execute(
+        "SELECT id, email, name FROM users WHERE id = %s AND is_active = TRUE",
+        (user_id,),
+    ).fetchone()
+
+    if user is None:
+        return render_template("set_password.html", invalid=True), 400
+
+    if request.method == "POST":
+        password = request.form.get("password", "")
+        confirm_password = request.form.get("confirm_password", "")
+
+        error = validate_password_strength(password)
+        if not error and password != confirm_password:
+            error = "Passwords do not match."
+
+        if error:
+            return render_template(
+                "set_password.html", user=user, token=token, error=error
+            ), 400
+
+        db.execute(
+            "UPDATE users SET password_hash = %s WHERE id = %s",
+            (hash_password(password), user["id"]),
+        )
+        db.commit()
+
+        return redirect(url_for("login"))
+
+    return render_template("set_password.html", user=user, token=token)
+
+@app.route("/admin/users/<int:user_id>/resend-invite", methods=["POST"])
+def admin_user_resend_invite(user_id):
+    admin_redirect = require_admin()
+
+    if admin_redirect is not None:
+        return admin_redirect
+
+    db = get_db()
+    ensure_auth_columns(db)
+    user = db.execute(
+        "SELECT id, email, role, password_hash FROM users WHERE id = %s",
+        (user_id,),
+    ).fetchone()
+
+    # Only re-invite a manageable account that is still pending (no password set
+    # yet). Activated accounts should use the password-reset flow instead.
+    if user is None or not can_manage_user_role(user["role"]) or user["password_hash"] is not None:
+        return redirect(url_for("admin_users"))
+
+    send_invite(user["id"], user["email"])
+
+    return redirect(url_for("admin_users"))
 
 @app.route("/admin/users/<int:user_id>/deactivate", methods=["POST"])
 def admin_user_deactivate(user_id):
@@ -1082,6 +1491,10 @@ def admin_user_deactivate(user_id):
 
     if admin_redirect is not None:
         return admin_redirect
+
+    sudo_redirect = require_sudo()
+    if sudo_redirect is not None:
+        return sudo_redirect
 
     if user_id == session.get("user_id"):
         return redirect(url_for("admin_users"))
@@ -1149,6 +1562,10 @@ def admin_user_delete(user_id):
 
     if admin_redirect is not None:
         return admin_redirect
+
+    sudo_redirect = require_sudo()
+    if sudo_redirect is not None:
+        return sudo_redirect
 
     if user_id == session.get("user_id"):
         return redirect(url_for("admin_users"))

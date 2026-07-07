@@ -5,7 +5,7 @@
 {% block content %}
 <section>
     <h2>Add User</h2>
-    <p>Create a registered user who can log in to the inventory system.</p>
+    <p>Create a user and email them a link to set their own password.</p>
 
     {% if error %}
     <p class="error-message">{{ error }}</p>
@@ -13,15 +13,6 @@
 
     <form method="post" action="{{ url_for('admin_user_new') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <label for="institution_id">Institution ID</label>
-        <input
-            type="text"
-            id="institution_id"
-            name="institution_id"
-            placeholder="Example: S2001"
-            required
-        >
-
         <label for="name">Full Name</label>
         <input
             type="text"
@@ -29,6 +20,23 @@
             name="name"
             placeholder="Example: Jane Doe"
             required
+        >
+
+        <label for="email">Email</label>
+        <input
+            type="email"
+            id="email"
+            name="email"
+            placeholder="Example: jane.doe@example.edu"
+            required
+        >
+
+        <label for="institution_id">Institution ID (optional)</label>
+        <input
+            type="text"
+            id="institution_id"
+            name="institution_id"
+            placeholder="Example: S2001"
         >
 
         <label for="role">Role</label>
@@ -47,7 +55,7 @@
             placeholder="Example: Nursing"
         >
 
-        <button type="submit">Create User</button>
+        <button type="submit">Create User &amp; Send Invite</button>
     </form>
 </section>
 {% endblock %}

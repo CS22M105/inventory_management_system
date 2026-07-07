@@ -1,5 +1,29 @@
 # Inventory Project Skeleton Plan
 
+## Recommended Reading Sequence
+
+Read the project documents in this order to build understanding from the "why"
+to the "how" to the "what is built next":
+
+1. `design_docx/planning_and_proposal.md` — The original proposal. Explains the
+   problem, the goal, and the overall idea (start here).
+2. `design_docx/Phase 1 and Phase 2 Build Plan.md` — Breaks the project into
+   phased, trackable tasks (requirements, design, and prototype setup).
+3. `design_docx/HIGH_LEVEL_DESIGN.md` — The systems-design view: how users, the
+   web app, the database, and the scanner fit together.
+4. `design_docx/SYSTEM_DIAGRAMS.md` — Visual Mermaid diagrams (context, data,
+   classes, and user workflows) that support the high-level design.
+5. `design_docx/PLAN.md` — This file. The concrete skeleton plan for the first
+   runnable Flask + PostgreSQL app.
+6. `design_docx/PROJECT_DOCUMENTATION.md` — The main learning/documentation
+   record: what was added, why, and how it works.
+7. `README.md` — How to install, initialize the database, and run the app.
+8. `PROGRESS_REPORT.md` — What has actually been built so far and current status.
+9. `QR_CODE_SYSTEM_INTEGRATION_PLAN.md` — Plan to add self-generated QR code
+   labels and camera-based scanning.
+10. `SECURITY_AND_AUTH_PLAN.md` — Plan to move from ID-only login to secure,
+    production-ready authentication.
+
 ## Summary
 
 Create a small Flask + PostgreSQL web app skeleton inside `inventory/

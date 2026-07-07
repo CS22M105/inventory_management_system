@@ -5,11 +5,15 @@ DROP SEQUENCE IF EXISTS item_barcode_number_seq;
 
 CREATE TABLE users (
     id SERIAL PRIMARY KEY,
-    institution_id TEXT NOT NULL UNIQUE,
+    institution_id TEXT UNIQUE,
+    email TEXT NOT NULL UNIQUE,
+    password_hash TEXT,
     name TEXT NOT NULL,
     role TEXT NOT NULL,
     department TEXT,
-    is_active BOOLEAN NOT NULL DEFAULT TRUE
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_login_at TIMESTAMP
 );
 
 CREATE TABLE items (
@@ -44,8 +48,10 @@ CREATE TABLE transactions (
     FOREIGN KEY (item_id) REFERENCES items (id) ON DELETE RESTRICT
 );
 
-INSERT INTO users (institution_id, name, role, department)
+-- Seed users have no password_hash yet (invited state). Set one with:
+--   flask --app app set-password <email> <password>
+INSERT INTO users (institution_id, email, name, role, department)
 VALUES
-    ('S1001', 'Demo Student', 'student', 'Nursing'),
-    ('F1001', 'Demo Faculty', 'faculty', 'Nursing'),
-    ('A1001', 'Demo Administrator', 'administrator', 'Simulation Lab');
+    ('S1001', 'student@example.edu', 'Demo Student', 'student', 'Nursing'),
+    ('F1001', 'faculty@example.edu', 'Demo Faculty', 'faculty', 'Nursing'),
+    ('A1001', 'admin@example.edu', 'Demo Administrator', 'administrator', 'Simulation Lab');

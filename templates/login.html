@@ -11,27 +11,32 @@
 {% block content %}
 <section class="login-card">
     <h2>Login</h2>
-    <p>Enter your student, faculty, or administrator ID to access the inventory system.</p>
+    <p>Enter your email and password to access the inventory system.</p>
 
     <form method="post" action="/login">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <label for="login_mode">Login Type</label>
-        <select id="login_mode" name="login_mode" required>
-            <option value="user">User</option>
-            <option value="faculty">Faculty</option>
-            <option value="admin">Administrator</option>
-        </select>
-
-        <label for="institution_id">Institution ID</label>
+        <label for="email">Email</label>
         <input
-            type="text"
-            id="institution_id"
-            name="institution_id"
-            placeholder="Example: S1001"
+            type="email"
+            id="email"
+            name="email"
+            placeholder="you@example.edu"
+            autocomplete="username"
+            required
+        >
+
+        <label for="password">Password</label>
+        <input
+            type="password"
+            id="password"
+            name="password"
+            autocomplete="current-password"
             required
         >
 
         <button type="submit">Log In</button>
+
+        <p class="login-forgot"><a href="{{ url_for('forgot_password') }}">Forgot password?</a></p>
     </form>
 </section>
 
