@@ -152,29 +152,48 @@ inventory/
 
 ## To run the current inventory app:
 
+Run these from your terminal:
+
 ```bash
 cd /Users/farhatjahan/Desktop/YU/summer26/YU_internship/Sim_Intern/inventory/inventory_management_system
 source .venv/bin/activate
+```
+
+Check PostgreSQL:
+
+```bash
+pg_isready -h localhost -d inventory_management_system
+```
+
+Start Flask:
+
+```bash
 python -m flask --app app run --debug --port 5001
+```
+
+Then open this in your browser:
+
+```text
+http://127.0.0.1:5001
+```
+
+If port `5001` is busy, use another port:
+
+```bash
+python -m flask --app app run --debug --port 5002
 ```
 
 Then open:
 
 ```text
-http://127.0.0.1:5001/login
+http://127.0.0.1:5002
 ```
 
-If PostgreSQL is not running, start it first:
+## Authentication part remaining things:
+1. Password reset email not sent.
 
-```bash
-brew services start postgresql
-```
-
-If you need to initialize the database from scratch:
-
-```bash
-python -m flask --app app init-db
-```
-
-Careful: `init-db` recreates the tables and demo data, so only run it if you are okay resetting the database.
-
+## QR codes
+0. DONE: password reset link is working when the app will be deployed its gonna send the invite/reset password link to the invitee.
+1. Label is big, I want only QR code, nothing else on the label. 
+2. How to make it printable from the p-touch D610BT label maker we have.
+3. Restrict the users to school email only.

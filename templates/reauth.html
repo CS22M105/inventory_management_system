@@ -15,14 +15,19 @@
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="next" value="{{ next }}">
         <label for="password">Password</label>
-        <input
-            type="password"
-            id="password"
-            name="password"
-            autocomplete="current-password"
-            required
-            autofocus
-        >
+        <div class="password-input-group">
+            <input
+                type="password"
+                id="password"
+                name="password"
+                autocomplete="current-password"
+                required
+                autofocus
+            >
+            <button class="password-toggle" type="button" data-password-toggle="password" aria-label="Show password" title="Show password">
+                <span class="password-eye" aria-hidden="true"></span>
+            </button>
+        </div>
 
         <button type="submit">Confirm</button>
     </form>

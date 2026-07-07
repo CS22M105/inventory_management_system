@@ -1,12 +1,14 @@
-from flask import Flask, Response, abort, g, redirect, render_template, request, session, url_for
+from flask import Flask, Response, abort, flash, g, redirect, render_template, request, session, url_for
 from flask_wtf.csrf import CSRFProtect, CSRFError
 from werkzeug.security import generate_password_hash, check_password_hash
 from itsdangerous import URLSafeTimedSerializer, BadData
 import csv
+from email.message import EmailMessage
 import io
 import os
 import psycopg2
 import qrcode
+import smtplib
 from psycopg2.extras import RealDictCursor
 import click
 import time
@@ -33,7 +35,14 @@ RESET_TOKEN_MAX_AGE = 60 * 60         # 1 hour
 # Transactional email provider selector. Unset (the default) means "no provider
 # configured": send_email() logs the message so invite/reset flows are testable
 # locally. A real provider (SES/SendGrid/SMTP/...) is wired up at deploy time.
-EMAIL_PROVIDER = os.environ.get("EMAIL_PROVIDER")
+EMAIL_PROVIDER = os.environ.get("EMAIL_PROVIDER", "").strip().lower()
+EMAIL_FROM = os.environ.get("EMAIL_FROM", "").strip()
+SMTP_HOST = os.environ.get("SMTP_HOST", "").strip()
+SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
+SMTP_USERNAME = os.environ.get("SMTP_USERNAME", "").strip()
+SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
+SMTP_USE_TLS = os.environ.get("SMTP_USE_TLS", "true").lower() in {"1", "true", "yes", "on"}
+SMTP_USE_SSL = os.environ.get("SMTP_USE_SSL", "false").lower() in {"1", "true", "yes", "on"}
 # Sessions expire after this many minutes of inactivity; each request slides the
 # window forward so active users are not logged out mid-task (see below).
 SESSION_IDLE_MINUTES = int(os.environ.get("SESSION_IDLE_MINUTES", "30"))
@@ -248,14 +257,39 @@ def send_email(to, subject, body):
     # No provider configured (development): log the full message so the link is
     # visible in the server console and flows can be tested without external mail.
     #
-    # Provider configured (production): a real integration must be wired here.
-    # We raise instead of silently succeeding so a misconfigured production
-    # deployment fails loudly rather than dropping invite/reset mail.
+    # Provider configured: send through SMTP using environment variables.
+    if EMAIL_PROVIDER == "smtp":
+        if not SMTP_HOST or not EMAIL_FROM:
+            raise RuntimeError("SMTP_HOST and EMAIL_FROM must be set to send email.")
+
+        message = EmailMessage()
+        message["From"] = EMAIL_FROM
+        message["To"] = to
+        message["Subject"] = subject
+        message.set_content(body)
+
+        if SMTP_USE_SSL:
+            with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=15) as smtp:
+                if SMTP_USERNAME:
+                    smtp.login(SMTP_USERNAME, SMTP_PASSWORD)
+                smtp.send_message(message)
+        else:
+            with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as smtp:
+                if SMTP_USE_TLS:
+                    smtp.starttls()
+                if SMTP_USERNAME:
+                    smtp.login(SMTP_USERNAME, SMTP_PASSWORD)
+                smtp.send_message(message)
+
+        return True
+
     if EMAIL_PROVIDER:
-        raise NotImplementedError(
-            f"EMAIL_PROVIDER={EMAIL_PROVIDER!r} is set but no email provider "
-            "integration is wired up yet."
+        raise RuntimeError(
+            f"Unsupported EMAIL_PROVIDER={EMAIL_PROVIDER!r}. Use EMAIL_PROVIDER=smtp."
         )
+
+    if APP_ENV == "production":
+        raise RuntimeError("EMAIL_PROVIDER=smtp must be configured in production.")
 
     app.logger.info(
         "DEV EMAIL (not actually sent)\nTo: %s\nSubject: %s\n\n%s",
@@ -263,7 +297,7 @@ def send_email(to, subject, body):
         subject,
         body,
     )
-    return True
+    return False
 
 def send_invite(user_id, email):
     # Email a "set your password" link for a newly created or re-invited user.
@@ -272,25 +306,27 @@ def send_invite(user_id, email):
     token = make_token(user_id, "invite")
     base_url = APP_BASE_URL or request.host_url.rstrip("/")
     link = f"{base_url}{url_for('set_password', token=token)}"
-    send_email(
+    sent = send_email(
         email,
         "Set your Katz Nursing Inventory password",
         "You have been invited to the Katz Nursing Inventory system.\n\n"
         f"Set your password using this link (valid for 72 hours):\n{link}\n",
     )
+    return {"sent": sent, "link": link}
 
 def send_reset(user_id, email):
     # Email a password-reset link. Must be called within a request context.
     token = make_token(user_id, "reset")
     base_url = APP_BASE_URL or request.host_url.rstrip("/")
     link = f"{base_url}{url_for('reset_password', token=token)}"
-    send_email(
+    sent = send_email(
         email,
         "Reset your Katz Nursing Inventory password",
         "We received a request to reset your password.\n\n"
         f"Reset it using this link (valid for 1 hour):\n{link}\n\n"
         "If you did not request this, you can ignore this email.\n",
     )
+    return {"sent": sent, "link": link}
 
 def require_login():
     if "user_id" not in session:
@@ -568,7 +604,24 @@ def forgot_password():
         ).fetchone()
 
         if user is not None:
-            send_reset(user["id"], user["email"])
+            try:
+                reset = send_reset(user["id"], user["email"])
+            except Exception as error:
+                app.logger.exception("Password reset email failed for %s", user["email"])
+                flash(
+                    "Password reset email could not be sent. Please check email "
+                    f"settings and try again. Error: {error}",
+                    "error",
+                )
+            else:
+                if reset["sent"]:
+                    flash("Password reset email sent.", "success")
+                else:
+                    flash(
+                        "Email is not configured locally, so no message was sent. "
+                        f"Reset link: {reset['link']}",
+                        "warning",
+                    )
 
         # Always show the same confirmation, whether or not the email matched a
         # real account, so the form cannot be used to discover registered emails.
@@ -1414,7 +1467,24 @@ def admin_user_new():
                 role_options=role_options,
             ), 400
 
-        send_invite(new_user["id"], email)
+        try:
+            invite = send_invite(new_user["id"], email)
+        except Exception as error:
+            app.logger.exception("Invite email failed for %s", email)
+            flash(
+                "User was created, but the invite email could not be sent. "
+                f"Please check email settings and use Resend invite. Error: {error}",
+                "error",
+            )
+        else:
+            if invite["sent"]:
+                flash(f"Invite email sent to {email}.", "success")
+            else:
+                flash(
+                    "User was created. Email is not configured locally, so no "
+                    f"message was sent. Invite link: {invite['link']}",
+                    "warning",
+                )
         return redirect(url_for("admin_users"))
 
     return render_template("user_new.html", role_options=role_options)
@@ -1481,7 +1551,24 @@ def admin_user_resend_invite(user_id):
     if user is None or not can_manage_user_role(user["role"]) or user["password_hash"] is not None:
         return redirect(url_for("admin_users"))
 
-    send_invite(user["id"], user["email"])
+    try:
+        invite = send_invite(user["id"], user["email"])
+    except Exception as error:
+        app.logger.exception("Invite email failed for %s", user["email"])
+        flash(
+            "Invite email could not be sent. Please check email settings and "
+            f"try again. Error: {error}",
+            "error",
+        )
+    else:
+        if invite["sent"]:
+            flash(f"Invite email sent to {user['email']}.", "success")
+        else:
+            flash(
+                "Email is not configured locally, so no message was sent. "
+                f"Invite link: {invite['link']}",
+                "warning",
+            )
 
     return redirect(url_for("admin_users"))
 

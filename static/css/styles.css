@@ -153,6 +153,37 @@ section h2 {
     font-size: 24px;
 }
 
+.flash-messages {
+    display: grid;
+    gap: 10px;
+    margin-bottom: 18px;
+}
+
+.flash-message {
+    border-radius: 6px;
+    margin: 0;
+    overflow-wrap: anywhere;
+    padding: 10px 12px;
+}
+
+.flash-success {
+    background: #dcfce7;
+    border: 1px solid #86efac;
+    color: #166534;
+}
+
+.flash-warning {
+    background: #fef3c7;
+    border: 1px solid #fcd34d;
+    color: #92400e;
+}
+
+.flash-error {
+    background: #fee2e2;
+    border: 1px solid #fca5a5;
+    color: #991b1b;
+}
+
 .page-header {
     align-items: center;
     display: flex;
@@ -361,6 +392,70 @@ select:focus,
 textarea:focus {
     border-color: #991b1b;
     outline: 3px solid rgba(153, 27, 27, 0.16);
+}
+
+.password-input-group {
+    position: relative;
+    width: 100%;
+}
+
+.password-input-group input {
+    box-sizing: border-box;
+    min-width: 0;
+    padding-right: 48px;
+    width: 100%;
+}
+
+.password-toggle {
+    align-items: center;
+    background: transparent;
+    color: #52606d;
+    display: inline-flex;
+    height: 32px;
+    justify-content: center;
+    min-width: 32px;
+    padding: 4px;
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.password-toggle:hover {
+    background: transparent;
+    color: #991b1b;
+}
+
+.password-eye {
+    border: 2px solid currentColor;
+    border-radius: 80% 15%;
+    display: inline-block;
+    height: 11px;
+    position: relative;
+    transform: rotate(45deg);
+    width: 11px;
+}
+
+.password-eye::before {
+    background: currentColor;
+    border-radius: 50%;
+    content: "";
+    height: 4px;
+    left: 50%;
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 4px;
+}
+
+.password-toggle.is-visible .password-eye::after {
+    background: currentColor;
+    content: "";
+    height: 2px;
+    left: -4px;
+    position: absolute;
+    top: 4px;
+    width: 19px;
 }
 
 .field-error {

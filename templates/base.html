@@ -63,11 +63,39 @@
     </header>
 
     <main>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="flash-messages" role="status" aria-live="polite">
+            {% for category, message in messages %}
+            <p class="flash-message flash-{{ category }}">{{ message }}</p>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
         {% block content %}{% endblock %}
     </main>
 
     <footer>
         <p>Local prototype for nursing inventory tracking.</p>
     </footer>
+
+    <script>
+        document.querySelectorAll("[data-password-toggle]").forEach((button) => {
+            button.addEventListener("click", () => {
+                const input = document.getElementById(button.dataset.passwordToggle);
+                if (!input) {
+                    return;
+                }
+
+                const isHidden = input.type === "password";
+                input.type = isHidden ? "text" : "password";
+                button.classList.toggle("is-visible", isHidden);
+                button.setAttribute("aria-label", isHidden ? "Hide password" : "Show password");
+                button.setAttribute("aria-pressed", String(isHidden));
+                button.setAttribute("title", isHidden ? "Hide password" : "Show password");
+            });
+        });
+    </script>
 </body>
 </html>
