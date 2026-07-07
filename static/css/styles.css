@@ -479,6 +479,14 @@ button:hover {
     background: #7f1d1d;
 }
 
+.secondary-button {
+    background: #52606d;
+}
+
+.secondary-button:hover {
+    background: #323f4b;
+}
+
 .danger-button {
     background: #b91c1c;
 }
@@ -530,6 +538,55 @@ th {
     border-radius: 6px;
     color: #991b1b;
     padding: 10px 12px;
+}
+
+.success-message {
+    background: #dcfce7;
+    border: 1px solid #86efac;
+    border-radius: 6px;
+    color: #166534;
+    padding: 10px 12px;
+}
+
+.camera-scan-panel {
+    background: rgba(255, 247, 247, 0.88);
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+    display: grid;
+    gap: 14px;
+    margin: 20px 0 24px;
+    padding: 16px;
+}
+
+.scan-panel-header {
+    margin-bottom: 0;
+}
+
+.scan-panel-header h3 {
+    margin: 0 0 6px;
+}
+
+.camera-reader {
+    background: #111827;
+    border: 1px solid #7f1d1d;
+    border-radius: 8px;
+    min-height: 260px;
+    overflow: hidden;
+    width: 100%;
+}
+
+.camera-reader[hidden] {
+    display: none;
+}
+
+.scan-status {
+    color: #52606d;
+    font-weight: 700;
+    margin: 0;
+}
+
+.scan-status-error {
+    color: #991b1b;
 }
 
 footer {

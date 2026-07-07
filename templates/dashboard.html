@@ -7,6 +7,22 @@
     <h2>Dashboard</h2>
     <p>Overview of the nursing inventory system.</p>
 
+    <div class="camera-scan-panel">
+        <div class="page-header scan-panel-header">
+            <div>
+                <h3>Camera QR Scan</h3>
+                <p>Scan a printed item QR code from the dashboard.</p>
+            </div>
+            <div class="action-group">
+                <button type="button" id="start-camera-scan">Start Camera</button>
+                <button type="button" id="stop-camera-scan" class="secondary-button" disabled>Stop Camera</button>
+            </div>
+        </div>
+
+        <div id="camera-reader" class="camera-reader" hidden></div>
+        <p id="camera-scan-status" class="scan-status">Camera scanner is ready.</p>
+    </div>
+
     <div class="dashboard-grid">
         <article>
             <h3>Total Items</h3>
@@ -58,4 +74,139 @@
     <p>No inventory actions have been recorded yet.</p>
     {% endif %}
 </section>
+
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        var startButton = document.getElementById("start-camera-scan");
+        var stopButton = document.getElementById("stop-camera-scan");
+        var statusText = document.getElementById("camera-scan-status");
+        var cameraReader = document.getElementById("camera-reader");
+        var stockUrlTemplate = "{{ url_for('item_stock', barcode='__BARCODE__') }}";
+        var qrScanner = null;
+        var scanLocked = false;
+
+        function setScannerStatus(message, isError) {
+            if (!statusText) {
+                return;
+            }
+
+            statusText.textContent = message;
+            statusText.classList.toggle("scan-status-error", Boolean(isError));
+        }
+
+        function getBarcodeFromScan(scannedText) {
+            var value = scannedText.trim();
+            if (!value) {
+                return "";
+            }
+
+            try {
+                var parsedUrl = new URL(value, window.location.origin);
+                var match = parsedUrl.pathname.match(/^\/items\/([^/]+)\/stock\/?$/);
+                if (match) {
+                    return decodeURIComponent(match[1]);
+                }
+            } catch (error) {
+                // Raw barcode values are handled below.
+            }
+
+            return value;
+        }
+
+        function getStockUrl(barcode) {
+            return stockUrlTemplate.replace("__BARCODE__", encodeURIComponent(barcode));
+        }
+
+        function handleCameraScan(scannedText) {
+            if (scanLocked) {
+                return;
+            }
+
+            var barcode = getBarcodeFromScan(scannedText);
+            if (!barcode) {
+                setScannerStatus("QR code was read, but no barcode was found.", true);
+                return;
+            }
+
+            scanLocked = true;
+            setScannerStatus("QR code scanned. Opening item stock page...", false);
+
+            if (qrScanner) {
+                qrScanner.stop().catch(function () {
+                    return null;
+                }).finally(function () {
+                    if (qrScanner) {
+                        qrScanner.clear();
+                    }
+                    qrScanner = null;
+                    cameraReader.hidden = true;
+                    startButton.disabled = false;
+                    stopButton.disabled = true;
+                    window.location.href = getStockUrl(barcode);
+                });
+            } else {
+                window.location.href = getStockUrl(barcode);
+            }
+        }
+
+        function startCameraScan() {
+            if (!window.Html5Qrcode) {
+                setScannerStatus("Camera scanner could not load. Use Items > Scan Item for manual entry.", true);
+                return;
+            }
+
+            if (qrScanner) {
+                return;
+            }
+
+            scanLocked = false;
+            cameraReader.hidden = false;
+            qrScanner = new Html5Qrcode("camera-reader");
+            startButton.disabled = true;
+            stopButton.disabled = false;
+            setScannerStatus("Starting camera...", false);
+
+            qrScanner.start(
+                { facingMode: "environment" },
+                { fps: 10, qrbox: { width: 220, height: 220 } },
+                handleCameraScan,
+                function () {
+                    return null;
+                }
+            ).then(function () {
+                setScannerStatus("Camera is active. Hold the printed QR code in view.", false);
+            }).catch(function (error) {
+                qrScanner = null;
+                cameraReader.hidden = true;
+                startButton.disabled = false;
+                stopButton.disabled = true;
+                setScannerStatus("Camera could not start. Check browser permission or use Items > Scan Item for manual entry.", true);
+                console.error(error);
+            });
+        }
+
+        function stopCameraScan() {
+            if (!qrScanner) {
+                return;
+            }
+
+            qrScanner.stop().then(function () {
+                qrScanner.clear();
+                qrScanner = null;
+                scanLocked = false;
+                cameraReader.hidden = true;
+                startButton.disabled = false;
+                stopButton.disabled = true;
+                setScannerStatus("Camera scanner stopped.", false);
+            }).catch(function (error) {
+                setScannerStatus("Camera could not be stopped cleanly. Refresh the page if needed.", true);
+                console.error(error);
+            });
+        }
+
+        startButton.addEventListener("click", startCameraScan);
+        stopButton.addEventListener("click", stopCameraScan);
+    });
+</script>
 {% endblock %}
