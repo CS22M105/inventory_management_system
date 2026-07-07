@@ -260,6 +260,18 @@ def test_lockout_after_repeated_failures(client, users, login):
     assert b"Too many failed attempts" in resp.data
 
 
+def test_last_attempt_warning_shown_before_lockout(client, users, login):
+    email = users["admin"]["email"]
+    # The first (MAX - 2) failures show no warning.
+    for _ in range(app_module.LOGIN_MAX_ATTEMPTS - 2):
+        resp = login(email, "WrongPassword")
+        assert b"last attempt" not in resp.data
+    # The next failure leaves exactly one attempt -> the warning appears.
+    resp = login(email, "WrongPassword")
+    assert resp.status_code == 401
+    assert b"last attempt" in resp.data
+
+
 def test_successful_login_resets_failed_attempts(client, users, login):
     email = users["admin"]["email"]
     for _ in range(app_module.LOGIN_MAX_ATTEMPTS - 1):
@@ -343,3 +355,95 @@ def test_reauth_requires_login(client, users):
     resp = client.get("/reauth")
     assert resp.status_code == 302
     assert "/login" in _location(resp)
+
+
+# ---------------------------------------------------------------------------
+# Step D: rate limiting / brute-force protection
+# ---------------------------------------------------------------------------
+
+def test_rate_limit_settings_configurable():
+    # Limits come from env-configurable module constants, and the limiter exists.
+    assert app_module.RATELIMIT_LOGIN
+    assert app_module.RATELIMIT_PASSWORD
+    assert app_module.RATELIMIT_STOCK
+    assert app_module.limiter is not None
+
+
+def test_rapid_logins_are_throttled_with_429(client, users):
+    # Enable the limiter for this test only (conftest disables it by default).
+    app_module.limiter.enabled = True
+    app_module.limiter._storage.reset()
+    try:
+        ip = {"REMOTE_ADDR": "203.0.113.10"}
+        # Distinct emails each attempt so the per-email lockout never trips —
+        # this isolates the IP-based rate limiter as the source of the 429.
+        codes = [
+            client.post(
+                "/login",
+                data={"email": f"probe{i}@test.edu", "password": "nope"},
+                environ_overrides=ip,
+            ).status_code
+            for i in range(12)
+        ]
+        assert 429 in codes, f"expected a 429 among {codes}"
+        # Early attempts are the normal 401, not throttled.
+        assert codes[0] == 401
+    finally:
+        app_module.limiter.enabled = False
+
+
+def test_429_response_is_friendly(client, users):
+    app_module.limiter.enabled = True
+    app_module.limiter._storage.reset()
+    try:
+        ip = {"REMOTE_ADDR": "203.0.113.11"}
+        last = None
+        for i in range(12):
+            last = client.post(
+                "/login",
+                data={"email": f"probe{i}@test.edu", "password": "nope"},
+                environ_overrides=ip,
+            )
+        assert last.status_code == 429
+        assert b"Too Many Attempts" in last.data
+    finally:
+        app_module.limiter.enabled = False
+
+
+def test_normal_login_usage_not_throttled(client, users):
+    # A handful of requests (well under the limit) from one IP are never 429.
+    app_module.limiter.enabled = True
+    app_module.limiter._storage.reset()
+    try:
+        ip = {"REMOTE_ADDR": "203.0.113.12"}
+        for _ in range(3):
+            resp = client.post(
+                "/login",
+                data={
+                    "email": users["admin"]["email"],
+                    "password": users["admin"]["password"],
+                },
+                environ_overrides=ip,
+            )
+            assert resp.status_code != 429
+    finally:
+        app_module.limiter.enabled = False
+
+
+def test_forgot_password_is_throttled(client, users):
+    app_module.limiter.enabled = True
+    app_module.limiter._storage.reset()
+    try:
+        ip = {"REMOTE_ADDR": "203.0.113.13"}
+        # RATELIMIT_PASSWORD default is stricter (5/min); 7 rapid POSTs trip it.
+        codes = [
+            client.post(
+                "/forgot-password",
+                data={"email": "ghost@test.edu"},
+                environ_overrides=ip,
+            ).status_code
+            for _ in range(7)
+        ]
+        assert 429 in codes, f"expected a 429 among {codes}"
+    finally:
+        app_module.limiter.enabled = False

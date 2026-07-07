@@ -93,7 +93,15 @@ def _configure_app():
     # focus on the authentication logic without minting tokens for every POST.
     app_module.app.config["TESTING"] = True
     app_module.app.config["WTF_CSRF_ENABLED"] = False
+    # Rate limiting (Step D) is off by default so the many requests other tests
+    # make are not throttled; the rate-limit tests enable it explicitly.
+    app_module.limiter.enabled = False
+    try:
+        app_module.limiter._storage.reset()
+    except Exception:
+        pass
     yield
+    app_module.limiter.enabled = False
 
 
 @pytest.fixture(autouse=True)

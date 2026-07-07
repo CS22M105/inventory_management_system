@@ -1242,3 +1242,60 @@ http://127.0.0.1:5002
 ### Current Result
 
 The system now has a smoother QR-based workflow for local use. The dashboard is the main place to start camera scanning, and a successful scan sends the user directly to the correct item's stock action page. Invite links are no longer confusing during local testing because the app clearly shows the invite link when email is not configured. Password forms are easier to use because users can reveal what they typed when needed. Existing inventory, transaction, QR label, user-management, and manual scan behavior remains available.
+
+## Update: July 7, 2026 — Login Attempt Limits, Lockout, and Rate Limiting
+
+This update documents the brute-force protections now guarding the login and other sensitive endpoints, and the small on-screen warning users see before they are locked out. These come from Security & Authentication Steps C and D (see `SECURITY_AND_AUTH_PLAN.md`), and this entry records the resulting limitations so the behavior is not surprising during use or testing.
+
+### 1. What Was Changed
+
+Where: `app.py`
+
+- **Per-email failed-login lockout (Step C).** After a configurable number of consecutive failed logins for the same email address, further attempts for that email are refused with an HTTP 429 response until a cooldown period passes. A successful login clears the counter.
+  - `LOGIN_MAX_ATTEMPTS` — number of allowed consecutive failures (default `5`).
+  - `LOGIN_LOCKOUT_SECONDS` — how long the cooldown lasts once tripped (default `300` seconds / 5 minutes).
+- **"Last attempt" warning.** Added `remaining_login_attempts(email)`. When a failed login leaves exactly one attempt before lockout, the login page shows a small notification line: "This is your last attempt before your account is temporarily locked."
+- **IP-based rate limiting (Step D, Flask-Limiter).** Independently of the per-email lockout, each client IP is rate-limited on sensitive endpoints. Exceeding a limit returns a friendly HTTP 429 "Too Many Attempts" page.
+  - `RATELIMIT_LOGIN` — `POST /login` (default `10 per minute`).
+  - `RATELIMIT_PASSWORD` — `POST /forgot-password`, `/set-password/<token>`, `/reset-password/<token>` (default `5 per minute`).
+  - `RATELIMIT_STOCK` — `/scan` and `/items/<barcode>/stock` (default `60 per minute`).
+  - `RATELIMIT_ENABLED` (default on) and `RATELIMIT_STORAGE_URI` (default `memory://`).
+
+Where: `templates/login.html`, `static/css/login.css`
+
+- Added a small inline notification line (`.login-warning`) that appears only on the last remaining attempt, styled as a modest amber banner above the form (separate from the existing error modal).
+
+Where: `templates/rate_limited.html`
+
+- Added a friendly "Too Many Attempts" page shown when a rate limit is exceeded.
+
+### 2. How It Was Done
+
+- The per-email lockout uses a small in-memory tracker keyed by email. Each failed login increments a counter; when it reaches `LOGIN_MAX_ATTEMPTS`, a `locked_until` timestamp is set, and `is_locked_out()` refuses attempts until it passes.
+- The login route computes `remaining_login_attempts(email)` after recording a failure and passes a `warning` to `login.html` only when exactly one attempt remains. The warning is shown for any email (registered or not), so it never reveals whether an email is registered.
+- Flask-Limiter is initialized keyed by client IP with no global default limits; each sensitive route opts in with a `@limiter.limit(...)` decorator. A single `@app.errorhandler(429)` renders the friendly page for both the lockout and the rate limiter.
+
+### 3. Why It Was Done This Way
+
+- **Two complementary limits.** The per-email lockout stops repeated guessing against one account; the per-IP rate limit stops one client hammering many accounts or scraping stock pages. Together they cover both attack shapes.
+- **A visible warning before lockout** reduces support friction: a legitimate user who mistypes their password is told they have one try left, instead of being surprised by a sudden lockout.
+- **Generic, non-revealing messages.** The failure text stays "Invalid email or password" and the warning is shown regardless of whether the email exists, so the system never discloses which emails are registered.
+- **Everything is environment-configurable**, so limits can be tightened or relaxed per deployment, and rate limiting can be disabled (used by the automated tests) or pointed at Redis for multi-worker production.
+
+### 4. Known Limitations
+
+- **The per-email lockout counter is in-memory and per-process.** It resets if the app restarts and is not shared across multiple Gunicorn workers or hosts. For a multi-worker or multi-host production deployment, the shared-store (Redis) rate limiter is the durable defense; set `RATELIMIT_STORAGE_URI` to a Redis URL so limits are shared.
+- **The default `memory://` rate-limit store is also per-process** for the same reason.
+- **A locked-out user must wait for the cooldown** (`LOGIN_LOCKOUT_SECONDS`); there is no admin "unlock now" button yet. Restarting the app clears in-memory lockouts.
+- The lockout is keyed by the submitted email, so a determined attacker rotating through many different emails is bounded by the per-IP rate limit rather than the per-email lockout.
+
+### 5. Verification Performed
+
+- Ran `python -m py_compile app.py`; compiled with no errors.
+- Ran the automated authentication test suite (`python -m pytest tests/`): **37 passed**, including tests for lockout after repeated failures (429), the "last attempt" warning appearing only on the final try, reset of the counter on successful login, rate-limit throttling, and the friendly 429 page.
+- Manual check with `LOGIN_MAX_ATTEMPTS = 5`: attempts 1–3 returned 401 with no warning; attempt 4 returned 401 with the "last attempt" warning; attempt 5 returned 401; attempt 6 returned 429 (locked out).
+- Manual check with `RATELIMIT_LOGIN="2 per minute"`: statuses were `401, 401, 429, 429`, confirming the limits are environment-configurable.
+
+### Current Result
+
+Login and other sensitive endpoints are now protected against brute-force and scraping through a per-email lockout and per-IP rate limiting, both configurable via environment variables. Users are warned on their final attempt before lockout, and both protections return a clear "too many attempts" message. The main limitation to keep in mind is that the in-memory counters are per-process; production deployments with multiple workers should use the Redis-backed rate limiter so the limits are shared.

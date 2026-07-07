@@ -1,5 +1,7 @@
 from flask import Flask, Response, abort, flash, g, redirect, render_template, request, session, url_for
 from flask_wtf.csrf import CSRFProtect, CSRFError
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from werkzeug.security import generate_password_hash, check_password_hash
 from itsdangerous import URLSafeTimedSerializer, BadData
 import csv
@@ -55,6 +57,18 @@ SUDO_MODE_MAX_AGE = int(os.environ.get("SUDO_MODE_MAX_AGE", "300"))
 # shared-store defense across multiple workers/hosts.
 LOGIN_MAX_ATTEMPTS = int(os.environ.get("LOGIN_MAX_ATTEMPTS", "5"))
 LOGIN_LOCKOUT_SECONDS = int(os.environ.get("LOGIN_LOCKOUT_SECONDS", "300"))
+# Step D: Flask-Limiter rate limits, keyed by client IP. All values are
+# environment-configurable. RATELIMIT_STORAGE_URI defaults to in-memory (good
+# for a single process); set it to a Redis URL (e.g. redis://host:6379) so
+# limits are shared across multiple Gunicorn workers or hosts in production.
+RATELIMIT_ENABLED = os.environ.get("RATELIMIT_ENABLED", "true").lower() in {"1", "true", "yes", "on"}
+RATELIMIT_STORAGE_URI = os.environ.get("RATELIMIT_STORAGE_URI", "memory://")
+# Login: brute-force protection on the credential endpoint.
+RATELIMIT_LOGIN = os.environ.get("RATELIMIT_LOGIN", "10 per minute")
+# Password links: request-reset / set-password / reset-password.
+RATELIMIT_PASSWORD = os.environ.get("RATELIMIT_PASSWORD", "5 per minute")
+# Stock endpoints: abuse/scraping protection (higher, still bounded).
+RATELIMIT_STOCK = os.environ.get("RATELIMIT_STOCK", "60 per minute")
 
 app = Flask(__name__)
 if APP_ENV == "production" and not SECRET_KEY:
@@ -77,6 +91,19 @@ app.config["SESSION_REFRESH_EACH_REQUEST"] = True
 # are signed with SECRET_KEY, so a strong key is required in production.
 csrf = CSRFProtect(app)
 
+# Rate limiting / brute-force protection (Step D). Keyed by client IP. No global
+# default limits — each sensitive route opts in with @limiter.limit(...). Uses
+# in-memory storage by default; point RATELIMIT_STORAGE_URI at Redis in prod so
+# limits are shared across workers/hosts.
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=[],
+    storage_uri=RATELIMIT_STORAGE_URI,
+    headers_enabled=True,
+)
+limiter.enabled = RATELIMIT_ENABLED
+
 
 @app.errorhandler(CSRFError)
 def handle_csrf_error(error):
@@ -85,6 +112,13 @@ def handle_csrf_error(error):
         "login.html",
         error="Your session expired or the form was invalid. Please try again.",
     ), 400
+
+
+@app.errorhandler(429)
+def handle_rate_limit(error):
+    # Flask-Limiter raises a 429 when a limit is exceeded. Show a clear,
+    # friendly page instead of a raw error.
+    return render_template("rate_limited.html"), 429
 
 
 class Database:
@@ -224,6 +258,13 @@ def clear_failed_login(email):
     # Called on a successful login so a legitimate user is not penalized for
     # earlier typos.
     _login_attempts.pop(email, None)
+
+def remaining_login_attempts(email):
+    # How many attempts remain for this email before the cooldown kicks in.
+    record = _login_attempts.get(email)
+    if not record:
+        return LOGIN_MAX_ATTEMPTS
+    return max(0, LOGIN_MAX_ATTEMPTS - record["count"])
 
 def get_token_serializer():
     # Tokens are signed with SECRET_KEY. Rotating SECRET_KEY invalidates every
@@ -497,6 +538,7 @@ def home():
     return redirect(url_for("login"))
 
 @app.route("/login", methods=["GET", "POST"])
+@limiter.limit(RATELIMIT_LOGIN, methods=["POST"])
 def login():
     if request.method == "POST":
         email = request.form.get("email", "").strip().lower()
@@ -526,9 +568,16 @@ def login():
         # so we never reveal which emails are registered.
         if user is None or not verify_password(user["password_hash"], password):
             record_failed_login(email)
+            # Warn on the final remaining try so the user is not surprised by the
+            # lockout. Shown for any email (not just registered ones), so it does
+            # not reveal whether the email exists.
+            warning = None
+            if remaining_login_attempts(email) == 1:
+                warning = "This is your last attempt before your account is temporarily locked."
             return render_template(
                 "login.html",
                 error="Invalid email or password.",
+                warning=warning,
             ), 401
 
         clear_failed_login(email)
@@ -593,6 +642,7 @@ def reauth():
     return render_template("reauth.html", next=next_url)
 
 @app.route("/forgot-password", methods=["GET", "POST"])
+@limiter.limit(RATELIMIT_PASSWORD, methods=["POST"])
 def forgot_password():
     if request.method == "POST":
         email = request.form.get("email", "").strip().lower()
@@ -630,6 +680,7 @@ def forgot_password():
     return render_template("forgot_password.html")
 
 @app.route("/reset-password/<token>", methods=["GET", "POST"])
+@limiter.limit(RATELIMIT_PASSWORD, methods=["POST"])
 def reset_password(token):
     # No login required: the signed "reset" token is the credential.
     user_id = read_token(token, "reset", RESET_TOKEN_MAX_AGE)
@@ -1074,6 +1125,7 @@ def process_stock_transaction(barcode, form):
     return f"{item['name']} updated successfully. New quantity: {new_quantity}.", None, 200
 
 @app.route("/scan", methods=["GET", "POST"])
+@limiter.limit(RATELIMIT_STOCK)
 def scan():
     login_redirect = require_login()
 
@@ -1104,6 +1156,7 @@ def get_stock_item(db, barcode):
     ).fetchone()
 
 @app.route("/items/<barcode>/stock", methods=["GET", "POST"])
+@limiter.limit(RATELIMIT_STOCK)
 def item_stock(barcode):
     login_redirect = require_login()
 
@@ -1490,6 +1543,7 @@ def admin_user_new():
     return render_template("user_new.html", role_options=role_options)
 
 @app.route("/set-password/<token>", methods=["GET", "POST"])
+@limiter.limit(RATELIMIT_PASSWORD, methods=["POST"])
 def set_password(token):
     # No login required: the signed "invite" token is the credential. The
     # password-reset flow (A5) is a separate route with its own "reset" token,

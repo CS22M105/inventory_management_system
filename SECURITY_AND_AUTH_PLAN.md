@@ -1094,3 +1094,97 @@ errors. (A conftest fixture clears the in-memory lockout store between tests.)
   non-destructive; extend require_sudo() to more actions if desired.
 ```
 
+---
+
+## Implementation Log — Step D (Rate limiting & brute-force protection) — 2026-07-07
+
+### What was built
+
+Flask-Limiter is initialized (keyed by client IP) and applied to the sensitive
+endpoints. Exceeding a limit returns a clear HTTP 429 page. All limits and the
+storage backend are environment-configurable.
+
+### How it works
+
+- **Limiter:** `Limiter(get_remote_address, app=app, default_limits=[],
+  storage_uri=RATELIMIT_STORAGE_URI, headers_enabled=True)`. There are no global
+  default limits; each sensitive route opts in with `@limiter.limit(...)`.
+  `limiter.enabled` follows `RATELIMIT_ENABLED`.
+- **Per-route limits (env-configurable):**
+    - `POST /login`            -> RATELIMIT_LOGIN    (default "10 per minute")
+    - `POST /forgot-password`  -> RATELIMIT_PASSWORD (default "5 per minute")
+    - `POST /set-password/<token>`   -> RATELIMIT_PASSWORD
+    - `POST /reset-password/<token>` -> RATELIMIT_PASSWORD
+    - `/scan`                  -> RATELIMIT_STOCK    (default "60 per minute")
+    - `/items/<barcode>/stock` -> RATELIMIT_STOCK
+  The auth limits use `methods=["POST"]` so only the state-changing verb is
+  counted; the stock endpoints are limited on all methods (scraping is a GET
+  concern too).
+- **429 response:** an `@app.errorhandler(429)` renders `templates/rate_limited.html`
+  ("Too Many Attempts") instead of a raw error.
+- **Storage:** `RATELIMIT_STORAGE_URI` defaults to `memory://` (single process).
+  Point it at Redis (e.g. `redis://host:6379`) in production so limits are shared
+  across Gunicorn workers/hosts.
+
+### Why these choices
+
+- **IP-keyed, per-route opt-in:** the login lockout (Step C) is per-email; the
+  limiter is per-IP, so together they cover both a single account being targeted
+  and one client hammering many accounts. Opt-in avoids accidentally throttling
+  read-only pages.
+- **Two tiers (auth vs stock):** credential/password endpoints get strict limits;
+  stock endpoints get a higher bound so legitimate lab activity is unaffected
+  while still capping scraping/abuse.
+- **Everything env-configurable + a disable switch:** operators tune limits per
+  deployment, and `RATELIMIT_ENABLED=false` (used in the test suite) turns it off
+  cleanly.
+
+### Modifications by file
+
+```text
+requirements.txt
+    - added Flask-Limiter>=3.5,<4.0.
+
+app.py
+    - Imports: Limiter, get_remote_address.
+    - Config: RATELIMIT_ENABLED, RATELIMIT_STORAGE_URI, RATELIMIT_LOGIN,
+      RATELIMIT_PASSWORD, RATELIMIT_STOCK.
+    - Initialized `limiter` (IP-keyed, no default limits, headers enabled) and
+      set limiter.enabled from RATELIMIT_ENABLED.
+    - Added @app.errorhandler(429) -> rate_limited.html.
+    - Decorated login, forgot_password, set_password, reset_password (POST) and
+      scan, item_stock (all methods) with @limiter.limit(...).
+
+templates/rate_limited.html (new)
+    - Friendly "Too Many Attempts" page (navigation hidden).
+
+tests/conftest.py
+    - Rate limiting disabled by default for tests (so other tests are not
+      throttled) and the limiter storage is reset around each test.
+```
+
+### Verification performed
+
+```text
+Added 5 tests to tests/test_auth.py (suite now 36 tests, all passing):
+    - Rate-limit settings are configurable and the limiter exists.
+    - 12 rapid logins from one IP (distinct emails, so the per-email lockout is
+      not the cause) -> a 429 appears; early attempts are 401.
+    - The 429 body is the friendly "Too Many Attempts" page.
+    - A few normal logins from one IP are never 429.
+    - forgot-password trips its stricter 5/min limit.
+.venv/bin/python -m pytest tests/ -v  ->  36 passed.
+Manual env check: RATELIMIT_LOGIN="2 per minute" -> statuses [401, 401, 429, 429]
+    (throttled after exactly 2 attempts), confirming env configurability.
+py_compile clean; no linter errors.
+```
+
+### Notes / follow-ups
+
+```text
+- memory:// is per-process. Set RATELIMIT_STORAGE_URI to Redis for multi-worker /
+  multi-host production so the limit counts are shared.
+- Consider limiting a few more write endpoints (item create/edit, user actions)
+  if abuse is observed; the pattern is a one-line @limiter.limit decorator.
+```
+

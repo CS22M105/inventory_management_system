@@ -13,6 +13,10 @@
     <h2>Login</h2>
     <p>Enter your email and password to access the inventory system.</p>
 
+    {% if warning %}
+    <p class="login-warning" role="alert">{{ warning }}</p>
+    {% endif %}
+
     <form method="post" action="/login">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label for="email">Email</label>

@@ -7,6 +7,16 @@
     max-width: none;
 }
 
+.login-warning {
+    background: #fef3c7;
+    border: 1px solid #f59e0b;
+    border-radius: 6px;
+    color: #92400e;
+    font-size: 0.9rem;
+    margin: 0 0 16px;
+    padding: 8px 12px;
+}
+
 .modal-backdrop {
     align-items: center;
     background: rgba(15, 23, 42, 0.52);
