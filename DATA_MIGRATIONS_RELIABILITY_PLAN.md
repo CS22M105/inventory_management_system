@@ -1031,3 +1031,72 @@ auth suite); the dev/production database is never touched. No linter errors.
 G — convert expiration_date TEXT -> real DATE (data migration + app updates).
 H — pagination + indexes on transactions. I — automated backups / PITR.
 ```
+
+---
+
+## Implementation log — Substep G1 (Data migration: TEXT -> DATE)
+
+Date: 2026-07-08
+
+### What changed and why
+
+`items.expiration_date` was free-text (`TEXT DEFAULT '00/00/0000'`) because the
+add/edit forms use a plain text input defaulting to the sentinel `00/00/0000`.
+Free text makes "expiring soon" queries, sorting, and validation impossible and
+lets malformed values in. G1 converts the column to a real `DATE` and cleans up
+the existing data, reversibly.
+
+Input format decision: the UI placeholder/default is `00/00/0000`
+(month/day/year), so the canonical format is treated as **MM/DD/YYYY**. A few
+other common formats (`YYYY-MM-DD`, `MM-DD-YYYY`, `MM/DD/YY`) are accepted
+defensively. Empty, the `00/00/0000` sentinel, and anything unparseable become
+`NULL` ("no expiration recorded") -- rows are never dropped.
+
+### Modifications by file
+
+```text
+migrations/versions/0003_expiration_date_to_date.py  (new)
+    down_revision = 0001_baseline (0003 is now the single head).
+    upgrade():   ADD COLUMN expiration_date_new DATE
+                 -> backfill in Python (op.get_bind()) parsing the old TEXT
+                 -> DROP old TEXT column -> RENAME new -> expiration_date.
+    downgrade(): ADD COLUMN expiration_date_old TEXT DEFAULT '00/00/0000'
+                 -> format each DATE back to MM/DD/YYYY (NULL -> '00/00/0000')
+                 -> DROP the DATE column -> RENAME back.
+
+Why a Python backfill and not SQL to_date(): PostgreSQL's to_date() does NOT
+raise on junk like '00/00/0000' -- it silently returns a bogus date. Parsing in
+Python and mapping failures to NULL is the correct, lossless behaviour.
+```
+
+### IMPORTANT follow-up (G2 — app code)
+
+```text
+After 0003 runs, the column is a DATE. The add/edit/CSV-import write paths in
+app.py still send the string '00/00/0000' (see the item form default), which will
+FAIL against a DATE column. G2 must update those paths to send a real date or
+NULL, switch the form input to type="date", and adjust templates/exports that
+render/compare against '00/00/0000'. This substep (G1) is schema + data only.
+```
+
+### Verification performed
+
+```text
+Scratch DB inv_g1, seeded at baseline (0001) with 7 items, then upgraded to head:
+    00/00/0000  -> NULL        (empty)      -> NULL
+    12/31/2025  -> 2025-12-31  2026-01-15   -> 2026-01-15
+    garbage     -> NULL        13/40/2025   -> NULL (impossible)
+    02/29/2024  -> 2024-02-29  (leap day preserved)
+    row count 7 -> 7 (no rows lost). Column type afterwards: date.
+Downgrade -1 restores TEXT: NULL -> '00/00/0000', dates -> MM/DD/YYYY
+    (e.g. 2026-01-15 normalizes to '01/15/2026'); re-upgrade returns to DATE.
+pytest tests/test_migrations.py -> 3 passed (chain 0001->0003, single head).
+No linter errors.
+```
+
+### Next
+
+```text
+G2 — update app.py write paths + item forms/templates for DATE (send NULL/real
+date, input type="date", stop using the '00/00/0000' sentinel).
+```
