@@ -978,3 +978,56 @@ py_compile app.py clean; no linter errors.
 F5 — migration tests / CI check (empty DB -> upgrade head -> assert schema;
 optional up/down round-trip on a scratch DB in CI).
 ```
+
+---
+
+## Implementation log — Substep F5 (Migration tests / CI check)
+
+Date: 2026-07-08
+
+### What changed and why
+
+Added an automated safety net so the migration chain can never silently rot. Up
+to F4, migrations were exercised only by hand. F5 makes CI prove, on every run,
+that a database built purely by Alembic has the schema the app expects, that the
+latest chain is reversible, and that the migration graph has not branched.
+
+### Modifications by file
+
+```text
+tests/test_migrations.py  (new)
+    - Uses its OWN throwaway database (default inventory_mig_test, overridable
+      via MIG_DATABASE_URL), separate from the auth suite's inventory_test,
+      because a migration test needs an empty, never-stamped DB it fully owns.
+    - migration_db fixture: drops+creates the throwaway DB and monkeypatches
+      DATABASE_URL to point at it (migrations/env.py reads DATABASE_URL at run
+      time), then drops the DB and restores DATABASE_URL afterwards.
+    - Drives Alembic through app.py's own _alembic_config(), so the test path
+      and the production/CLI path share one config.
+    - test_upgrade_head_creates_expected_schema: `alembic upgrade head` from
+      zero, then asserts the users/items/transactions tables, a representative
+      column set per table (incl. everything the old ensure_* shims added),
+      the item_barcode_number_seq sequence, unique indexes on users(email) and
+      items(barcode), and a primary-key index on each table.
+    - test_upgrade_downgrade_upgrade_roundtrip: upgrade head -> downgrade base
+      (asserts tables + sequence are gone) -> upgrade head again, all without
+      error; guards reversibility.
+    - test_single_migration_head: ScriptDirectory.get_heads() must be length 1
+      (no divergent heads). Needs no live DB.
+```
+
+### Verification performed
+
+```text
+pytest tests/test_migrations.py -v  -> 3 passed.
+Full suite (auth + migrations)      -> 40 passed (37 auth + 3 migration).
+Each migration test creates and drops its own scratch DB (same pattern as the
+auth suite); the dev/production database is never touched. No linter errors.
+```
+
+### Next
+
+```text
+G — convert expiration_date TEXT -> real DATE (data migration + app updates).
+H — pagination + indexes on transactions. I — automated backups / PITR.
+```
