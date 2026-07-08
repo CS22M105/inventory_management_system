@@ -907,3 +907,74 @@ Regression: full auth suite still passes (37 passed). py_compile clean; no linte
 F4 — wire migrations into startup/deploy (run `alembic upgrade head` once per
 release, document the init-db-vs-migrations story), then F5 migration tests.
 ```
+
+---
+
+## Implementation log — Substep F4 (Wire migrations into startup/deploy)
+
+Date: 2026-07-08
+
+### What changed and why
+
+Migrations now have a documented home in the deploy lifecycle, and operators have
+a single consistent interface for them. Previously Alembic existed (F1–F3) but
+nothing tied `alembic upgrade head` to a release; there was also a risk operators
+would keep using `init-db` (which rebuilds from `schema.sql`) on a database that
+is under Alembic control. F4 makes the split explicit: `init-db` is local-dev
+bootstrap only; migrations own production/shared schema, and they run once per
+release before the new app serves traffic — never per request.
+
+### Modifications by file
+
+```text
+app.py
+    - Added _alembic_config(): builds an alembic.config.Config from the project's
+      alembic.ini. It does NOT set a URL; migrations/env.py reads DATABASE_URL
+      from the environment, so the CLI and the app always target the same DB.
+      Alembic is imported lazily inside the CLI functions, so the web-serving
+      process never imports Alembic.
+    - Added `flask db-upgrade [revision]` (default "head"): wraps
+      `alembic upgrade` — the production/release-phase schema command.
+    - Added `flask db-downgrade <revision>` (e.g. `-1`): wraps `alembic downgrade`.
+      Uses context_settings ignore_unknown_options so a leading "-1" is accepted
+      as an argument (matching the native Alembic CLI) instead of being parsed as
+      an option.
+    - Rewrote the init-db docstring/echo to state it is a LOCAL DEV bootstrap only
+      and to point at `flask db-upgrade` / `alembic upgrade head` for shared DBs.
+
+Procfile
+    - Added a `release: alembic upgrade head` line before `web: gunicorn app:app`
+      so platforms with a release phase run migrations once per deploy, before the
+      new web dyno/process serves traffic.
+
+README.md
+    - init-db section now labelled "LOCAL DEV bootstrap only".
+    - Production Configuration Procfile snippet updated to show the release line.
+    - New "Database migrations" section: alembic upgrade head / flask db-upgrade,
+      the release-phase behaviour, `alembic current`, rollback with
+      `alembic downgrade -1` / `flask db-downgrade -1`, creating revisions, and a
+      clear "do not run init-db against an Alembic-managed database" note.
+```
+
+### Verification performed
+
+```text
+Scratch database inv_f4 (built purely by migrations):
+    - `flask --app app --help` lists db-upgrade, db-downgrade, init-db.
+    - Fresh DB: `alembic current` reports no version.
+    - CLEAN DEPLOY: `flask db-upgrade` -> "Running upgrade -> 0001_baseline";
+      `alembic current` = 0001_baseline (head).
+    - NO-OP REDEPLOY: `flask db-upgrade` again -> no "Running upgrade" line
+      (safe no-op).
+    - ROLLBACK: `flask db-downgrade -1` -> "Running downgrade 0001_baseline -> ";
+      `alembic current` = none; re-`db-upgrade` restores head.
+    - App boots and serves against the migration-built DB: GET /login -> 200.
+py_compile app.py clean; no linter errors.
+```
+
+### Next
+
+```text
+F5 — migration tests / CI check (empty DB -> upgrade head -> assert schema;
+optional up/down round-trip on a scratch DB in CI).
+```

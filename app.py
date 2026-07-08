@@ -451,9 +451,25 @@ def close_db(error=None):
     if db is not None:
         db.close()
 
+def _alembic_config():
+    # Build an Alembic config pointed at the project's alembic.ini. The database
+    # URL is not set here: migrations/env.py reads DATABASE_URL from the
+    # environment (the same variable the app uses), so the CLI and the app always
+    # target the same database. Imported lazily so the web-serving process never
+    # imports Alembic.
+    from alembic.config import Config as AlembicConfig
+
+    return AlembicConfig(str(BASE_DIR / "alembic.ini"))
+
 @app.cli.command("init-db")
 def init_db_command():
-    """Initialize the database."""
+    """Bootstrap a LOCAL DEV database from schema.sql (includes demo users).
+
+    This is a convenience for local development only. Production and any shared
+    database should be managed with migrations instead:  `flask db-upgrade`
+    (i.e. `alembic upgrade head`). Do not use init-db to manage a database that
+    is under Alembic control -- it would recreate tables from schema.sql.
+    """
     db = get_db()
 
     with SCHEMA.open("r") as schema_file:
@@ -462,8 +478,38 @@ def init_db_command():
     db.commit()
 
     # schema.sql builds the complete schema for local dev; production schema is
-    # managed by Alembic (`alembic upgrade head`). No runtime ALTERs needed.
-    click.echo("Initialized the PostgreSQL inventory database.")
+    # managed by Alembic (`flask db-upgrade` / `alembic upgrade head`).
+    click.echo("Initialized the PostgreSQL inventory database (local dev bootstrap).")
+
+@app.cli.command("db-upgrade")
+@click.argument("revision", default="head")
+def db_upgrade_command(revision):
+    """Apply database migrations (default: upgrade to 'head').
+
+    This is the production/shared-database schema command and the one to run in
+    the deploy release phase, before the new app version serves traffic. It wraps
+    `alembic upgrade <revision>` so operators have one consistent interface.
+    """
+    from alembic import command as alembic_command
+
+    alembic_command.upgrade(_alembic_config(), revision)
+    click.echo(f"Database upgraded to {revision}.")
+
+@app.cli.command(
+    "db-downgrade",
+    context_settings={"ignore_unknown_options": True},
+)
+@click.argument("revision")
+def db_downgrade_command(revision):
+    """Roll back database migrations (e.g. `flask db-downgrade -1`).
+
+    Wraps `alembic downgrade <revision>`. Use with care on a real database; test
+    on a scratch copy first.
+    """
+    from alembic import command as alembic_command
+
+    alembic_command.downgrade(_alembic_config(), revision)
+    click.echo(f"Database downgraded to {revision}.")
 
 @app.cli.command("set-password")
 @click.argument("email")

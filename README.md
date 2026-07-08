@@ -101,11 +101,15 @@ Set a secret key for sessions:
 export SECRET_KEY="replace-with-a-long-random-secret-key"
 ```
 
-Initialize the database tables and demo users:
+Initialize the database tables and demo users (LOCAL DEV bootstrap only):
 
 ```bash
 flask --app app init-db
 ```
+
+`init-db` loads `schema.sql` (tables plus demo users) and is a convenience for
+local development. Shared and production databases are managed with migrations
+instead (see "Database migrations" below).
 
 Run the app:
 
@@ -130,10 +134,58 @@ Required environment variables:
 The app includes a `Procfile` for platforms that support it:
 
 ```text
+release: alembic upgrade head
 web: gunicorn app:app
 ```
 
-For cloud hosting, install dependencies from `requirements.txt`, set the environment variables, initialize the PostgreSQL database once, and start the app with Gunicorn.
+The `release` line runs database migrations once per deploy, before the new web
+process starts serving traffic (see "Database migrations" below).
+
+For cloud hosting, install dependencies from `requirements.txt`, set the environment variables, run the migrations, and start the app with Gunicorn.
+
+## Database migrations
+
+Schema changes are managed with [Alembic](https://alembic.sqlalchemy.org/) in
+raw-SQL mode. Alembic reads the same `DATABASE_URL` the app uses (configured in
+`migrations/env.py`), so no connection string is stored in `alembic.ini`.
+
+**Production / any shared database** is managed by migrations, not `init-db`.
+Apply all pending migrations before the new app version serves traffic:
+
+```bash
+alembic upgrade head
+# or, through the Flask wrapper (one consistent interface for operators):
+flask --app app db-upgrade
+```
+
+On platforms with a release phase (Heroku, Railway, Render, etc.), the
+`Procfile` already runs `alembic upgrade head` there, so this happens
+automatically on every deploy. A redeploy with no new migrations is a safe
+no-op.
+
+Check the current revision of a database:
+
+```bash
+alembic current
+```
+
+Roll back the most recent migration (test on a scratch database first):
+
+```bash
+alembic downgrade -1
+# or:
+flask --app app db-downgrade -1
+```
+
+Create a new migration (hand-written raw SQL via `op.execute` / `op.add_column`
+/ `op.create_index`):
+
+```bash
+alembic revision -m "describe the change"
+```
+
+`init-db` remains only for local dev bootstrap; do not run it against a database
+that is under Alembic control.
 
 ## Planned Project Structure
 
