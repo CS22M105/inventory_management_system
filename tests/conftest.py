@@ -72,9 +72,10 @@ def _create_test_database():
 
     with app_module.app.app_context():
         db = app_module.get_db()
+        # schema.sql builds the complete schema (the ensure_*_columns runtime
+        # shims were removed in F3; the schema is owned by migrations/schema.sql).
         with app_module.SCHEMA.open("r") as schema_file:
             db.execute(schema_file.read())
-        app_module.ensure_auth_columns(db)
         db.commit()
 
     yield

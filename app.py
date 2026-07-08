@@ -153,64 +153,21 @@ def get_db():
         # This allows us to access columns by name.
     return g.db
 
-def ensure_transaction_columns(db):
-    db.execute("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS transaction_date DATE")
-    db.execute("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS transaction_time TIME(0)")
-    db.execute("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS lab_instructor TEXT")
-    db.execute("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS topic_of_day TEXT")
-    db.execute("ALTER TABLE transactions ALTER COLUMN transaction_date SET DEFAULT CURRENT_DATE")
-    db.execute("ALTER TABLE transactions ALTER COLUMN transaction_time SET DEFAULT LOCALTIME(0)")
-    db.execute(
-        """
-        UPDATE transactions
-        SET transaction_date = created_at::date
-        WHERE transaction_date IS NULL
-        """
-    )
-    db.execute(
-        """
-        UPDATE transactions
-        SET transaction_time = created_at::time(0)
-        WHERE transaction_time IS NULL
-        """
-    )
-    db.execute("ALTER TABLE transactions ALTER COLUMN transaction_date SET NOT NULL")
-    db.execute("ALTER TABLE transactions ALTER COLUMN transaction_time SET NOT NULL")
-    db.commit()
-
-def ensure_barcode_sequence(db):
-    # Runtime safety: create the internal item-code sequence if a database
-    # created before this feature does not have it yet. Safe to call repeatedly.
-    db.execute("CREATE SEQUENCE IF NOT EXISTS item_barcode_number_seq START WITH 1")
-    db.commit()
+# Schema is owned by Alembic migrations (see migrations/versions/). The former
+# ensure_transaction_columns / ensure_barcode_sequence / ensure_auth_columns
+# runtime shims — which issued ALTER TABLE / CREATE INDEX / CREATE SEQUENCE on
+# ordinary requests — have been removed. All the columns, defaults, the
+# item_barcode_number_seq sequence, and the users_email_key unique index they
+# used to guarantee are created by the baseline migration (0001_baseline).
+# Apply schema with `alembic upgrade head` (production) or `flask init-db`
+# (local dev bootstrap via schema.sql).
 
 def generate_next_item_barcode(db):
     # Draw the next unique number from the PostgreSQL sequence and format it as
-    # a zero-padded internal code (e.g. KATZ-NURS-000001). The sequence is
-    # ensured first so this works on databases created before the feature.
-    ensure_barcode_sequence(db)
+    # a zero-padded internal code (e.g. KATZ-NURS-000001). The sequence
+    # (item_barcode_number_seq) is created by the baseline migration.
     number = db.execute("SELECT nextval('item_barcode_number_seq') AS number").fetchone()["number"]
     return f"{BARCODE_PREFIX}-{number:06d}"
-
-def ensure_auth_columns(db):
-    # Runtime safety for databases created before email/password authentication
-    # existed. Fresh databases get these from schema.sql; this upgrades older
-    # ones in place without dropping data. Safe to call repeatedly.
-    #
-    # Note: the email column is added as nullable here (existing rows have no
-    # email yet), while schema.sql defines it NOT NULL for fresh installs. The
-    # unique index reuses PostgreSQL's default constraint index name
-    # (users_email_key) so a fresh database that already has the UNIQUE
-    # constraint is left untouched.
-    db.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT")
-    db.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT")
-    db.execute(
-        "ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP"
-    )
-    db.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP")
-    db.execute("ALTER TABLE users ALTER COLUMN institution_id DROP NOT NULL")
-    db.execute("CREATE UNIQUE INDEX IF NOT EXISTS users_email_key ON users (email)")
-    db.commit()
 
 def hash_password(raw_password):
     # Werkzeug salts and hashes the password (PBKDF2 by default). The raw
@@ -504,10 +461,8 @@ def init_db_command():
 
     db.commit()
 
-    # Runtime safety for databases initialized before these features existed.
-    ensure_barcode_sequence(db)
-    ensure_auth_columns(db)
-
+    # schema.sql builds the complete schema for local dev; production schema is
+    # managed by Alembic (`alembic upgrade head`). No runtime ALTERs needed.
     click.echo("Initialized the PostgreSQL inventory database.")
 
 @app.cli.command("set-password")
@@ -516,7 +471,6 @@ def init_db_command():
 def set_password_command(email, password):
     """Set (or reset) a user's password by email. Used to bootstrap accounts."""
     db = get_db()
-    ensure_auth_columns(db)
 
     error = validate_password_strength(password)
     if error:
@@ -553,7 +507,6 @@ def login():
             ), 429
 
         db = get_db()
-        ensure_auth_columns(db)
         user = db.execute(
             """
             SELECT id, email, name, role, password_hash
@@ -623,7 +576,6 @@ def reauth():
     if request.method == "POST":
         password = request.form.get("password", "")
         db = get_db()
-        ensure_auth_columns(db)
         user = db.execute(
             "SELECT password_hash FROM users WHERE id = %s AND is_active = TRUE",
             (session.get("user_id"),),
@@ -647,7 +599,6 @@ def forgot_password():
     if request.method == "POST":
         email = request.form.get("email", "").strip().lower()
         db = get_db()
-        ensure_auth_columns(db)
         user = db.execute(
             "SELECT id, email FROM users WHERE LOWER(email) = %s AND is_active = TRUE",
             (email,),
@@ -689,7 +640,6 @@ def reset_password(token):
         return render_template("reset_password.html", invalid=True), 400
 
     db = get_db()
-    ensure_auth_columns(db)
     user = db.execute(
         "SELECT id, email FROM users WHERE id = %s AND is_active = TRUE",
         (user_id,),
@@ -727,7 +677,6 @@ def dashboard():
         return login_redirect
 
     db = get_db()
-    ensure_transaction_columns(db)
     total_items = db.execute("SELECT COUNT(*) AS total FROM items").fetchone()["total"]
     low_stock_items = db.execute(
         """
@@ -1073,7 +1022,6 @@ def process_stock_transaction(barcode, form):
         return None, "Notes are required.", 400
 
     db = get_db()
-    ensure_transaction_columns(db)
     item = db.execute(
         """
         SELECT id, name, quantity
@@ -1300,7 +1248,6 @@ def transactions():
         return login_redirect
 
     db = get_db()
-    ensure_transaction_columns(db)
 
     filters = get_transaction_filters()
     items, users, lab_instructors, topics = get_transaction_filter_options(db)
@@ -1326,7 +1273,6 @@ def export_transactions():
         return login_redirect
 
     db = get_db()
-    ensure_transaction_columns(db)
     transaction_rows = get_transaction_rows(db, get_transaction_filters())
 
     output = io.StringIO()
@@ -1497,7 +1443,6 @@ def admin_user_new():
             ), 400
 
         db = get_db()
-        ensure_auth_columns(db)
 
         try:
             # password_hash is left NULL: the account is "invited" until the
@@ -1554,7 +1499,6 @@ def set_password(token):
         return render_template("set_password.html", invalid=True), 400
 
     db = get_db()
-    ensure_auth_columns(db)
     user = db.execute(
         "SELECT id, email, name FROM users WHERE id = %s AND is_active = TRUE",
         (user_id,),
@@ -1594,7 +1538,6 @@ def admin_user_resend_invite(user_id):
         return admin_redirect
 
     db = get_db()
-    ensure_auth_columns(db)
     user = db.execute(
         "SELECT id, email, role, password_hash FROM users WHERE id = %s",
         (user_id,),

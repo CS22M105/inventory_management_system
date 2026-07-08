@@ -820,3 +820,90 @@ Scratch databases and temp dumps were removed; the real database was untouched.
 F3 — confirm the baseline covers everything the ensure_*_columns() functions do,
 then remove those per-request calls from the view code paths.
 ```
+
+---
+
+## Implementation Log — F3 (Fold ensure_*_columns into migrations; remove from request paths) — 2026-07-08
+
+### What was built
+
+The per-request schema-mutation shims are gone. `ensure_transaction_columns`,
+`ensure_barcode_sequence`, and `ensure_auth_columns` — which issued `ALTER TABLE`
+/ `CREATE INDEX` / `CREATE SEQUENCE` on ordinary page loads — have been removed
+entirely, along with every call to them. The schema they used to guarantee is now
+owned by the `0001_baseline` migration (and `schema.sql` for local dev).
+
+### Baseline coverage check (no 0002 needed)
+
+Every object the three functions created is already in `0001_baseline`, so no
+additional revision was required:
+
+```text
+ensure_transaction_columns ->
+    transaction_date DATE, transaction_time TIME(0), lab_instructor, topic_of_day,
+    their DEFAULTs (CURRENT_DATE / LOCALTIME(0)) and NOT NULL constraints
+        ... all present in the baseline transactions table.
+    (The UPDATE backfills only mattered for upgrading OLD data in place; a
+     migration-built DB starts correct, so they are not needed.)
+ensure_barcode_sequence ->
+    CREATE SEQUENCE item_barcode_number_seq ... present in the baseline.
+ensure_auth_columns ->
+    email NOT NULL UNIQUE, password_hash, created_at DEFAULT now(), last_login_at,
+    institution_id nullable, and the users_email_key unique index (the inline
+    UNIQUE on email creates exactly that index) ... all present in the baseline.
+```
+
+### Decision on the function definitions
+
+Deleted them (not kept as dead code). Rationale: keeping DDL helpers around invites
+the "ALTER on request" anti-pattern to creep back; the schema now has one source of
+truth (migrations, mirrored by `schema.sql` for dev). Emergency manual repair, if
+ever needed, is `alembic upgrade head` against the database.
+
+### Modifications by file
+
+```text
+app.py
+    - Deleted the ensure_transaction_columns / ensure_barcode_sequence /
+      ensure_auth_columns function definitions; left a short comment explaining
+      that migrations own the schema.
+    - generate_next_item_barcode() no longer calls ensure_barcode_sequence; it
+      just draws nextval() from the sequence (created by the baseline).
+    - Removed every per-request call:
+        login, reauth, forgot_password, reset_password, set_password,
+        admin_user_new, admin_user_resend_invite  (were ensure_auth_columns)
+        dashboard, process_stock_transaction, transactions, export_transactions
+                                                   (were ensure_transaction_columns)
+    - CLI: init-db no longer calls ensure_* (schema.sql builds everything);
+      set-password no longer calls ensure_auth_columns.
+
+tests/conftest.py
+    - Test DB is built from schema.sql only; removed the ensure_auth_columns(db)
+      call (the columns already exist in schema.sql).
+```
+
+### Verification performed
+
+```text
+Code review / grep:
+    - No ensure_*_columns(...) calls remain in app.py or tests/ (only a comment).
+    - No ALTER TABLE / CREATE INDEX / CREATE SEQUENCE / ADD COLUMN remains in
+      app.py (only the explanatory comment mentions the words).
+Boots against a MIGRATION-BUILT database (inv_f3, schema created solely by
+`alembic upgrade head` -> 0001_baseline; schema.sql NOT used):
+    - Seeded an admin, logged in (302), created an item (write path) -> barcode
+      KATZ-NURS-000001 generated via the migration's sequence, stock add -> 200.
+    - GET 200 on dashboard, items, item detail, low-stock, scan, item stock,
+      transactions, transactions/export, reports/export, admin users, login,
+      forgot-password.
+    - forgot POST -> 200; reset/set-password with a bad token -> 400.
+Regression: full auth suite still passes (37 passed). py_compile clean; no linter
+    errors. Scratch database dropped; the real database was untouched.
+```
+
+### Next
+
+```text
+F4 — wire migrations into startup/deploy (run `alembic upgrade head` once per
+release, document the init-db-vs-migrations story), then F5 migration tests.
+```
