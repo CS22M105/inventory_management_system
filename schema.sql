@@ -1,3 +1,9 @@
+-- NOTE: As of Phase 2 (Alembic), this file is a readable reference and a
+-- convenience for local dev bootstrap only. The SOURCE OF TRUTH for schema
+-- changes is the migrations/ directory. For any new/production database, run
+-- `alembic upgrade head` instead of applying this file. The baseline revision
+-- (migrations/versions/0001_baseline.py) mirrors the CREATE statements below.
+
 DROP TABLE IF EXISTS transactions;
 DROP TABLE IF EXISTS items;
 DROP TABLE IF EXISTS users;

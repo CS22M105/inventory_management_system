@@ -740,3 +740,83 @@ Scratch database dropped afterward; the real database was never touched.
 F2 — author the baseline revision (0001_baseline) that represents the current
 schema, and support `alembic stamp` for existing databases.
 ```
+
+---
+
+## Implementation Log — F2 (Baseline the current schema) — 2026-07-08
+
+### What was built
+
+The first real migration, `0001_baseline`, which creates the entire current
+schema (after all Phase 1 changes) on an empty database, and can be `stamp`ed on
+an existing database so Alembic adopts it without recreating anything.
+
+### How it works
+
+- **Revision:** `migrations/versions/0001_baseline.py`, `revision = "0001_baseline"`,
+  `down_revision = None` (it is the first/root revision). Generated with
+  `alembic revision --rev-id 0001_baseline` and then filled in / renamed to the
+  plan's filename.
+- **upgrade():** explicit `op.execute(...)` SQL that mirrors `schema.sql` exactly
+  (minus the DROP statements and the demo seed rows): the `users`, `items`, and
+  `transactions` tables, the standalone `item_barcode_number_seq` sequence, and
+  every column/constraint the `ensure_*_columns()` shims guarantee (email
+  NOT NULL UNIQUE -> the `users_email_key` index, `password_hash`, `created_at`,
+  `last_login_at`, nullable `institution_id`, the transaction date/time/instructor/
+  topic columns, and the two FKs with `ON DELETE RESTRICT`).
+- **downgrade():** drops everything in reverse dependency order (transactions,
+  items, sequence, users).
+- **Adoption on an existing DB:** documented in the file's docstring —
+  `alembic stamp 0001_baseline` marks the DB as already at the baseline without
+  running the CREATE statements.
+
+### Why these choices
+
+- **Mirror schema.sql verbatim** so a freshly migrated database and an existing
+  `stamp`ed database are structurally identical (verified below). Writing it as
+  raw SQL keeps the migration readable and matches the raw-`psycopg2` app.
+- **Standalone sequence + inline UNIQUE constraints** reproduce the exact object
+  names production already has (e.g. `users_email_key`), so `stamp` is truthful
+  and later revisions line up.
+
+### Modifications by file
+
+```text
+migrations/versions/0001_baseline.py (new)
+    - upgrade(): CREATE users, items, item_barcode_number_seq, transactions.
+    - downgrade(): DROP them in reverse order.
+
+schema.sql
+    - Added a header note: this file is now a dev-bootstrap/reference; the
+      migrations/ directory is the source of truth. Production uses
+      `alembic upgrade head`. (No DDL changed.)
+```
+
+### Verification performed
+
+```text
+Fresh empty DB (inv_f2_fresh):
+    - `alembic upgrade head` ran 0001_baseline and built the full schema.
+    - `alembic current` -> "0001_baseline (head)".
+Existing DB (inv_f2_existing, built by applying schema.sql):
+    - `alembic stamp 0001_baseline` marked it at the baseline (no CREATEs run).
+    - `alembic upgrade head` was a clean no-op (no "Running upgrade" line).
+    - `alembic current` -> "0001_baseline (head)".
+Schema equality:
+    - `pg_dump -s` of both databases is IDENTICAL (ignoring pg_dump's random
+      \restrict/\unrestrict session tokens); alembic_version = 0001_baseline in
+      both.
+Reversibility smoke:
+    - `alembic downgrade base` dropped users/items/transactions (leaving only
+      alembic_version); `alembic upgrade head` rebuilt them.
+Regression:
+    - Full auth suite still passes (37 passed).
+Scratch databases and temp dumps were removed; the real database was untouched.
+```
+
+### Next
+
+```text
+F3 — confirm the baseline covers everything the ensure_*_columns() functions do,
+then remove those per-request calls from the view code paths.
+```
