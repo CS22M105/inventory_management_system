@@ -14,7 +14,7 @@ import smtplib
 from psycopg2.extras import RealDictCursor
 import click
 import time
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 
 # holds the parent path to the current script we are running.
@@ -407,8 +407,28 @@ def allowed_user_roles_to_manage():
 def can_manage_user_role(role):
     return role in allowed_user_roles_to_manage()
 
+def parse_expiration_date(value):
+    """Parse a submitted expiration value into a date, or None when unset.
+
+    The <input type="date"> field submits ISO (YYYY-MM-DD); a couple of other
+    common formats are accepted defensively. Empty / unparseable -> None, which
+    is stored as SQL NULL ("no expiration recorded"). The old '00/00/0000'
+    sentinel is gone -- an unset date is NULL now.
+    """
+    if not value:
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%m-%d-%Y", "%m/%d/%y"):
+        try:
+            return datetime.strptime(text, fmt).date()
+        except ValueError:
+            continue
+    return None
+
 def get_item_form_data(require_barcode=True):
-    expiration_date = request.form.get("expiration_date", "").strip() or "00/00/0000"
+    expiration_date = parse_expiration_date(request.form.get("expiration_date", ""))
 
     data = {
         "barcode": request.form.get("barcode", "").strip(),

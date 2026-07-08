@@ -1100,3 +1100,72 @@ No linter errors.
 G2 — update app.py write paths + item forms/templates for DATE (send NULL/real
 date, input type="date", stop using the '00/00/0000' sentinel).
 ```
+
+---
+
+## Implementation log — Substep G2 (Application + template updates)
+
+Date: 2026-07-08
+
+### What changed and why
+
+G1 turned the column into a `DATE` but the app still sent the string
+`'00/00/0000'`, which would fail against a `DATE` column. G2 updates the write
+paths, forms, templates, and the dev reference schema so the whole app speaks
+`DATE`/`NULL` and the `00/00/0000` sentinel is gone from the UI and DB.
+
+### Modifications by file
+
+```text
+app.py
+    - New helper parse_expiration_date(value): parses the submitted value into a
+      datetime.date, or None when empty/unparseable. Accepts ISO (YYYY-MM-DD,
+      what <input type="date"> submits) first, plus MM/DD/YYYY, MM-DD-YYYY,
+      MM/DD/YY defensively. No more '00/00/0000' default.
+    - get_item_form_data() now stores None (SQL NULL) for an unset date instead
+      of the sentinel; the INSERT/UPDATE already bind item_data["expiration_date"]
+      directly, so psycopg2 sends a real DATE or NULL.
+    - Added `from datetime import datetime` (was only timedelta).
+
+templates/item_new.html, templates/item_edit.html
+    - Expiration field is now <input type="date"> with value
+      `{{ item.get('expiration_date') or '' }}` (empty when unset; a date renders
+      as ISO, which is what type="date" expects).
+
+templates/item_label.html
+    - Condition simplified from `if expiration_date and != '00/00/0000'` to just
+      `if item["expiration_date"]` (NULL hides the Exp line).
+
+templates/item_detail.html
+    - Unchanged: already `{{ item["expiration_date"] or "Not set" }}`, which now
+      shows "Not set" for NULL and the real date otherwise.
+
+schema.sql
+    - items.expiration_date is now `DATE` (was `TEXT DEFAULT '00/00/0000'`), so
+      fresh dev bootstraps match the migrated (head) schema.
+```
+
+### Verification performed
+
+```text
+Functional (scratch DB inv_g2, schema built by `alembic upgrade head`; login as
+seeded admin, CSRF disabled for the client):
+    - Create item WITH date 2025-12-31 -> stored as DATE (pg_typeof = date);
+      detail shows 2025-12-31; label shows "Exp: 2025-12-31".
+    - Create item WITHOUT date -> stored as NULL; detail shows "Not set"; label
+      hides the Exp line.
+    - Edit the no-date item to 2026-06-01 -> persists as DATE.
+    - 0 rows equal the '00/00/0000' sentinel in the DB; '00/00/0000' appears in
+      none of the rendered detail/label pages.
+Full suite: 40 passed (37 auth + 3 migration). py_compile clean; no linter errors.
+grep: '00/00/0000' now appears only inside the migration files (0001 baseline /
+0003 reverse mapping), never in app.py, templates, or schema.sql.
+```
+
+### Next
+
+```text
+H — pagination + indexes on transactions (date/item/user). I — automated backups
+/ PITR. (Optional G follow-up: an "expiring soon" indicator, now that the column
+is comparable.)
+```

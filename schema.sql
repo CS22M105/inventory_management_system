@@ -32,7 +32,7 @@ CREATE TABLE items (
     quantity INTEGER NOT NULL DEFAULT 0,
     minimum_quantity INTEGER NOT NULL DEFAULT 0,
     location TEXT,
-    expiration_date TEXT DEFAULT '00/00/0000',
+    expiration_date DATE,
     notes TEXT
 );
 

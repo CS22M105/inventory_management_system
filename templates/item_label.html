@@ -24,7 +24,7 @@
         {% if item["company"] %}
         <p class="qr-label-meta">Vendor: {{ item["company"] }}</p>
         {% endif %}
-        {% if item["expiration_date"] and item["expiration_date"] != "00/00/0000" %}
+        {% if item["expiration_date"] %}
         <p class="qr-label-meta">Exp: {{ item["expiration_date"] }}</p>
         {% endif %}
     </div>

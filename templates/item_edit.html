@@ -93,11 +93,10 @@
 
         <label for="expiration_date">Expiration Date</label>
         <input
-            type="text"
+            type="date"
             id="expiration_date"
             name="expiration_date"
-            placeholder="00/00/0000"
-            value="{{ item.get('expiration_date') or '00/00/0000' }}"
+            value="{{ item.get('expiration_date') or '' }}"
         >
 
         <label for="notes">Notes</label>
