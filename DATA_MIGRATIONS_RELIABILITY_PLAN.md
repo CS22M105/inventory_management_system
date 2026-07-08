@@ -1169,3 +1169,47 @@ H — pagination + indexes on transactions (date/item/user). I — automated bac
 / PITR. (Optional G follow-up: an "expiring soon" indicator, now that the column
 is comparable.)
 ```
+
+---
+
+## Implementation log — Substep G3 (Regression check)
+
+Date: 2026-07-08
+
+### What changed and why
+
+Locked the G1/G2 DATE behaviour behind automated tests so the add/edit/detail/
+label flows can't silently regress, and re-confirmed the toolchain is clean.
+
+### Modifications by file
+
+```text
+tests/test_item_form.py  (new)
+    Uses the shared throwaway DB + fixtures from conftest.py (logs in as the
+    seeded faculty item-manager). Covers:
+    - create item WITH a real date -> stored as datetime.date; detail + label
+      show 2025-12-31.
+    - create item WITHOUT a date -> stored as NULL; detail shows "Not set";
+      label hides the Exp line.
+    - unparseable date ("not-a-date") -> stored as NULL (defensive parse, no
+      crash).
+    - edit an item's date -> persists as DATE.
+    - the '00/00/0000' sentinel never appears in rendered detail/label pages.
+```
+
+### Verification performed
+
+```text
+pytest tests/test_item_form.py -> 5 passed.
+Full suite -> 45 passed (37 auth + 3 migration + 5 item-form).
+py_compile app.py clean; no linter errors on changed files.
+Existing QR label / item detail / item edit flows: covered by the new tests and
+green.
+```
+
+### Next
+
+```text
+H — pagination + indexes on transactions (date/item/user). I — automated backups
+/ PITR.
+```
