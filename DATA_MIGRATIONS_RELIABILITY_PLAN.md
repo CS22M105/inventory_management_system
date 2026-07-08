@@ -1213,3 +1213,71 @@ green.
 H — pagination + indexes on transactions (date/item/user). I — automated backups
 / PITR.
 ```
+
+---
+
+## Implementation log — Substep H1 (Indexes migration)
+
+Date: 2026-07-08
+
+### What changed and why
+
+The /transactions list sorts by `(transaction_date DESC, transaction_time DESC,
+id DESC)` and filters by item/user/date range; on a growing table those become a
+full seq scan + sort. Revision 0004 adds the supporting indexes so the sort and
+the filters are index-served.
+
+### Modifications by file
+
+```text
+migrations/versions/0004_transaction_indexes.py  (new)
+    down_revision = 0003_expiration_date_to_date (0004 is now the single head).
+    upgrade(): CREATE INDEX IF NOT EXISTS
+        ix_transactions_item_id            ON transactions (item_id)
+        ix_transactions_user_id            ON transactions (user_id)
+        ix_transactions_transaction_date   ON transactions (transaction_date)
+        ix_transactions_date_time_id       ON transactions
+            (transaction_date DESC, transaction_time DESC, id DESC)  <- matches ORDER BY
+        ix_items_name                      ON items (name)
+    downgrade(): DROP INDEX IF EXISTS (reverse order).
+
+CONCURRENTLY caveat (documented in the migration): plain CREATE INDEX takes a
+brief lock; fine for today's small table. On a large busy table build with
+CREATE INDEX CONCURRENTLY in a maintenance window instead -- but CONCURRENTLY
+cannot run inside a transaction block and Alembic wraps migrations in one, so it
+must be run manually, then `alembic stamp 0004_transaction_indexes`. The
+IF NOT EXISTS guards make that path a safe no-op.
+
+Note: ix_transactions_transaction_date is partly redundant with the composite
+(same leading column); kept per plan since write volume is low and it is cheaper
+for pure date-range scans. Drop later if bloat matters.
+
+tests/test_migrations.py
+    - test_upgrade_head_creates_expected_schema now also asserts the four
+      ix_transactions_* indexes and ix_items_name exist at head.
+```
+
+### Verification performed
+
+```text
+Scratch DB inv_h1: schema+indexes built by `alembic upgrade head` (0001->0004),
+seeded 10 users, 50 items, 100,000 transactions, then ANALYZE. EXPLAIN (ANALYZE):
+    ORDER BY (date,time,id) DESC LIMIT 50
+        -> Index Scan using ix_transactions_date_time_id, NO explicit sort.
+    WHERE item_id = 7   -> Bitmap Index Scan on ix_transactions_item_id.
+    WHERE user_id = 3   -> Bitmap Index Scan on ix_transactions_user_id.
+    WHERE transaction_date BETWEEN ... 
+        -> Bitmap Index Scan on ix_transactions_transaction_date.
+    items ORDER BY name -> seq scan+sort (items has only 50 rows, so a scan is
+        optimal; ix_items_name is present and used once the catalog grows).
+pg_indexes confirms all five ix_* indexes exist.
+Migration chain: single head = 0004; upgrade/downgrade/upgrade round-trip green.
+Full suite: 45 passed. No linter errors.
+```
+
+### Next
+
+```text
+H2 — pagination on /transactions (LIMIT/OFFSET or keyset) so the list and export
+use bounded queries that lean on ix_transactions_date_time_id. Then I — backups.
+```

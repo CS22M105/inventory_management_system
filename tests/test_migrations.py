@@ -211,6 +211,19 @@ def test_upgrade_head_creates_expected_schema(migration_db):
             assert any(
                 name.endswith("_pkey") for name in _index_defs(conn, table)
             ), f"{table} is missing its primary-key index"
+
+        # Performance indexes added in 0004 must be present at head.
+        tx_indexes = set(_index_defs(conn, "transactions"))
+        for expected in (
+            "ix_transactions_item_id",
+            "ix_transactions_user_id",
+            "ix_transactions_transaction_date",
+            "ix_transactions_date_time_id",
+        ):
+            assert expected in tx_indexes, f"missing index {expected}"
+        assert "ix_items_name" in _index_defs(conn, "items"), (
+            "missing index ix_items_name"
+        )
     finally:
         conn.close()
 
