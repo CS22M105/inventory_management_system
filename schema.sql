@@ -54,6 +54,15 @@ CREATE TABLE transactions (
     FOREIGN KEY (item_id) REFERENCES items (id) ON DELETE RESTRICT
 );
 
+-- Performance indexes (mirror migration 0004_transaction_indexes). Support the
+-- /transactions list ORDER BY and its item/user/date filters, plus items sort.
+CREATE INDEX ix_transactions_item_id ON transactions (item_id);
+CREATE INDEX ix_transactions_user_id ON transactions (user_id);
+CREATE INDEX ix_transactions_transaction_date ON transactions (transaction_date);
+CREATE INDEX ix_transactions_date_time_id
+    ON transactions (transaction_date DESC, transaction_time DESC, id DESC);
+CREATE INDEX ix_items_name ON items (name);
+
 -- Seed users have no password_hash yet (invited state). Set one with:
 --   flask --app app set-password <email> <password>
 INSERT INTO users (institution_id, email, name, role, department)

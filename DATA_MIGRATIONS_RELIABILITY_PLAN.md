@@ -1347,3 +1347,57 @@ deep OFFSET pages ever get slow.
 I — automated backups + point-in-time recovery (managed-Postgres snapshots / WAL;
 documented restore drill). Optional: an "expiring soon" indicator (Step G).
 ```
+
+---
+
+## Implementation log — Substep H3 (Verification with volume)
+
+Date: 2026-07-08
+
+### What changed and why
+
+Locked H1+H2 behaviour under automated tests that run at volume, and fixed a
+schema-mirror gap found while doing so.
+
+### Modifications by file
+
+```text
+schema.sql
+    - Added the five performance indexes from migration 0004 (ix_transactions_*
+      and ix_items_name). schema.sql is the dev-bootstrap mirror of head, and it
+      was missing them, so a DB built from schema.sql (including the test DB) did
+      not match a migration-built DB. Now they agree.
+
+tests/test_transactions_pagination.py  (new)
+    - Module-scoped fixture seeds the shared test DB with 6 users, 20 items and
+      5,000 transactions (bulk generate_series insert) + ANALYZE.
+    - Pagination-math edges: first page (Page 1 of 100, 50 rows, Prev disabled),
+      full last page (Page 100 of 100, Next disabled), out-of-range page clamps
+      to last, non-numeric/<=0 page clamps to first, partial last page via a
+      user filter (833 rows -> 17 pages, last page 33 rows), and empty result
+      (impossible filter -> "No transactions match...", no nav).
+    - Filter + paging: filter is preserved across page links; export stays
+      unpaginated (5,000 rows).
+    - Index usage: EXPLAIN (ANALYZE) of the paginated joined query asserts it
+      uses ix_transactions_date_time_id with NO "Sort Method" and NO
+      "Seq Scan on transactions".
+    - Page-load timing: GET /transactions?page=50 completes well under a generous
+      2s ceiling (actual: a few ms).
+```
+
+### Verification performed
+
+```text
+pytest tests/test_transactions_pagination.py -> 9 passed (5,000-row dataset).
+Full suite -> 54 passed (37 auth + 3 migration + 5 item-form + 9 pagination).
+py_compile clean; no linter errors.
+EXPLAIN on the paginated query: Index Scan using ix_transactions_date_time_id,
+no explicit sort, no sequential scan of transactions.
+```
+
+### Next
+
+```text
+I — automated backups + point-in-time recovery (managed-Postgres snapshots / WAL;
+documented restore drill). Optional: an "expiring soon" indicator (Step G).
+```
