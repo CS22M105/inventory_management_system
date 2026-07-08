@@ -133,7 +133,27 @@
         </tbody>
     </table>
     {% else %}
-    <p>No transactions have been recorded yet.</p>
+    <p>No transactions match the current filters.</p>
+    {% endif %}
+
+    {% if total and total > 0 %}
+    <nav class="pagination" aria-label="Transaction history pages">
+        {% if has_prev %}
+        <a class="button-link secondary-link" href="{{ prev_url }}">&larr; Previous</a>
+        {% else %}
+        <span class="button-link secondary-link disabled" aria-disabled="true">&larr; Previous</span>
+        {% endif %}
+
+        <span class="pagination-status">
+            Page {{ page }} of {{ total_pages }} &middot; {{ total }} transaction{{ '' if total == 1 else 's' }}
+        </span>
+
+        {% if has_next %}
+        <a class="button-link secondary-link" href="{{ next_url }}">Next &rarr;</a>
+        {% else %}
+        <span class="button-link secondary-link disabled" aria-disabled="true">Next &rarr;</span>
+        {% endif %}
+    </nav>
     {% endif %}
 </section>
 {% endblock %}

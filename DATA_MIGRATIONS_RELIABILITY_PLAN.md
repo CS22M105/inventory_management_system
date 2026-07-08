@@ -1281,3 +1281,69 @@ Full suite: 45 passed. No linter errors.
 H2 — pagination on /transactions (LIMIT/OFFSET or keyset) so the list and export
 use bounded queries that lean on ix_transactions_date_time_id. Then I — backups.
 ```
+
+---
+
+## Implementation log — Substep H2 (Server-side pagination)
+
+Date: 2026-07-08
+
+### What changed and why
+
+The /transactions page loaded the entire (filtered) table into one HTML page --
+fine now, unusable as history grows. H2 paginates the on-screen list with
+LIMIT/OFFSET on the existing ORDER BY (so it rides the 0004 composite index),
+while the CSV export stays UNPAGINATED (full filtered set).
+
+### Modifications by file
+
+```text
+app.py
+    - New constant TRANSACTIONS_PAGE_SIZE (env TRANSACTIONS_PAGE_SIZE, default 50).
+    - get_transaction_rows(db, filters, limit=None, offset=None): appends
+      LIMIT/OFFSET only when limit is given. Export calls it WITHOUT limit, so it
+      still returns every matching row.
+    - New count_transaction_rows(db, filters): COUNT(*) with the same filter
+      clause (no JOINs needed) to drive the controls.
+    - /transactions view: reads ?page=, computes total_pages, CLAMPS page into
+      [1, total_pages] (out-of-range page lands on the last page), fetches just
+      that page, and builds prev_url/next_url via url_for(..., page=, **filters)
+      so navigation preserves active filters. Submitting the filter form omits
+      ?page=, so changing a filter resets to page 1.
+    - export_transactions unchanged (still get_transaction_rows without limit).
+
+templates/transactions.html
+    - Added a .pagination nav: Previous / "Page X of Y - N transactions" / Next,
+      rendered when there are matching rows; boundary links render as disabled
+      spans. Empty-state text now reads "No transactions match the current
+      filters."
+
+static/css/styles.css
+    - .pagination, .pagination-status, and .button-link.disabled styles.
+```
+
+### Verification performed
+
+```text
+Scratch DB inv_h2, TRANSACTIONS_PAGE_SIZE=10, 30 seeded transactions
+(25 on item_a/admin, 5 on item_b/student):
+    - page 1/2/3 each show 10 rows; "Page 1 of 3" ... "Page 3 of 3".
+    - Previous disabled on page 1; Next disabled on page 3.
+    - ?page=99 clamps to "Page 3 of 3".
+    - Filter item_b -> "Page 1 of 1", 5 rows, "5 transactions".
+    - Filter item_a + ?page=2 -> "Page 2 of 3" and prev/next carry item_id
+      (filters preserved across pages).
+    - Export (no filter) returns 30 data rows; export?item_id=item_b returns 5 --
+      i.e. the FULL filtered set, not one page.
+Full suite: 45 passed. py_compile clean; no linter errors.
+Note: /items pagination was left out (optional; the item catalog is small). Add
+the same pattern there if it grows. Keyset/seek pagination is a future upgrade if
+deep OFFSET pages ever get slow.
+```
+
+### Next
+
+```text
+I — automated backups + point-in-time recovery (managed-Postgres snapshots / WAL;
+documented restore drill). Optional: an "expiring soon" indicator (Step G).
+```

@@ -361,6 +361,25 @@ form {
     background: #323f4b;
 }
 
+.pagination {
+    align-items: center;
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    margin: 24px 0 0;
+}
+
+.pagination-status {
+    color: #52606d;
+    font-weight: 700;
+}
+
+.button-link.disabled {
+    background: #cbd2d9;
+    cursor: default;
+    pointer-events: none;
+}
+
 label {
     font-weight: 700;
 }

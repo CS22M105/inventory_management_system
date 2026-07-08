@@ -29,6 +29,9 @@ SECRET_KEY = os.environ.get("SECRET_KEY")
 APP_BASE_URL = os.environ.get("APP_BASE_URL")
 # Prefix for auto-generated internal item codes (e.g. KATZ-NURS-000014).
 BARCODE_PREFIX = os.environ.get("BARCODE_PREFIX", "KATZ-NURS")
+# On-screen transaction history page size (server-side pagination). The CSV
+# export is intentionally NOT paginated -- it returns the full filtered set.
+TRANSACTIONS_PAGE_SIZE = max(1, int(os.environ.get("TRANSACTIONS_PAGE_SIZE", "50")))
 # Minimum length enforced for account passwords (see validate_password_strength).
 MIN_PASSWORD_LENGTH = 8
 # Lifetimes (in seconds) for signed invite and password-reset links.
@@ -1246,8 +1249,27 @@ def build_transaction_filter_clause(filters):
 
     return where_clause, params
 
-def get_transaction_rows(db, filters):
+def count_transaction_rows(db, filters):
+    # Total matching rows, used to render pagination controls. The filter clause
+    # only references transactions.* columns, so no JOINs are needed here.
     where_clause, params = build_transaction_filter_clause(filters)
+
+    return db.execute(
+        "SELECT COUNT(*) AS total FROM transactions {where_clause}".format(
+            where_clause=where_clause
+        ),
+        params,
+    ).fetchone()["total"]
+
+def get_transaction_rows(db, filters, limit=None, offset=None):
+    # limit/offset are for the on-screen paginated list. The CSV export calls
+    # this WITHOUT them so it returns the full filtered result set.
+    where_clause, params = build_transaction_filter_clause(filters)
+
+    pagination = ""
+    if limit is not None:
+        pagination = "LIMIT %s OFFSET %s"
+        params = params + [limit, offset or 0]
 
     return db.execute(
         """
@@ -1268,7 +1290,8 @@ def get_transaction_rows(db, filters):
         JOIN users ON users.id = transactions.user_id
         {where_clause}
         ORDER BY transactions.transaction_date DESC, transactions.transaction_time DESC, transactions.id DESC
-        """.format(where_clause=where_clause),
+        {pagination}
+        """.format(where_clause=where_clause, pagination=pagination),
         params,
     ).fetchall()
 
@@ -1317,8 +1340,39 @@ def transactions():
 
     filters = get_transaction_filters()
     items, users, lab_instructors, topics = get_transaction_filter_options(db)
-    transaction_rows = get_transaction_rows(db, filters)
+
     export_params = {key: value for key, value in filters.items() if value}
+
+    # Server-side pagination. Total drives the controls; page is clamped so an
+    # out-of-range ?page= (e.g. after tightening a filter) lands on a valid page.
+    total = count_transaction_rows(db, filters)
+    page_size = TRANSACTIONS_PAGE_SIZE
+    total_pages = max(1, (total + page_size - 1) // page_size)
+
+    try:
+        page = int(request.args.get("page", "1"))
+    except ValueError:
+        page = 1
+    page = max(1, min(page, total_pages))
+
+    offset = (page - 1) * page_size
+    transaction_rows = get_transaction_rows(
+        db, filters, limit=page_size, offset=offset
+    )
+
+    # Page links carry the active filters (but not the old page number) so
+    # navigation preserves filters; submitting the filter form omits ?page= and
+    # therefore resets to page 1.
+    prev_url = (
+        url_for("transactions", page=page - 1, **export_params)
+        if page > 1
+        else None
+    )
+    next_url = (
+        url_for("transactions", page=page + 1, **export_params)
+        if page < total_pages
+        else None
+    )
 
     return render_template(
         "transactions.html",
@@ -1329,6 +1383,14 @@ def transactions():
         lab_instructors=lab_instructors,
         topics=topics,
         export_url=url_for("export_transactions", **export_params),
+        page=page,
+        total_pages=total_pages,
+        total=total,
+        page_size=page_size,
+        has_prev=page > 1,
+        has_next=page < total_pages,
+        prev_url=prev_url,
+        next_url=next_url,
     )
 
 @app.route("/transactions/export")
