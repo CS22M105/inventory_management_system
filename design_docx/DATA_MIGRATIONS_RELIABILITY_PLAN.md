@@ -1350,6 +1350,177 @@ documented restore drill). Optional: an "expiring soon" indicator (Step G).
 
 ---
 
+## Implementation log — Step I / Deployment Step J1 (Managed PostgreSQL backups + PITR)
+
+Date: 2026-07-08
+
+### Status
+
+Documentation and restore-runbook work is ready in the repo. The actual managed
+PostgreSQL instance, automated backups, PITR toggle, and restore drill must be
+completed in the chosen cloud/provider console because no production provider is
+connected from this local workspace.
+
+This Step I work is satisfied operationally by Deployment Phase 3, Substep J1.
+
+### Provider configuration to create
+
+Create one managed PostgreSQL database per customer/tenant. Use a managed
+service such as Render/Railway/Fly/Heroku Postgres, Neon, Supabase, AWS
+RDS/Aurora, Google Cloud SQL, or Azure Database for PostgreSQL.
+
+Required settings:
+
+```text
+Database type:        Managed PostgreSQL
+Backups:              Automated daily backups enabled
+PITR/WAL:             Point-in-time recovery enabled
+Retention window:     7-30 days, based on customer requirement and cost
+Backup location:      Provider-managed storage, not the app host
+TLS:                  Required for client connections
+Access control:       Least-privilege app user; restrict network access where possible
+```
+
+Record these values after provisioning:
+
+```text
+Provider:
+Region:
+Database name:
+PostgreSQL version:
+Backup retention window:
+PITR enabled: yes/no
+Earliest restorable time:
+Latest restorable time:
+RPO target:
+RTO target:
+Primary owner/operator:
+Escalation contact:
+```
+
+Recommended first-launch targets:
+
+```text
+RPO: <= 5 minutes when PITR/WAL is available
+RTO: <= 60 minutes for a restore to a new managed instance
+```
+
+### DATABASE_URL handling
+
+Capture the provider's TLS-enabled connection string as `DATABASE_URL` and store
+it only in the platform secret/environment store. Do not commit it to git.
+
+Expected shape:
+
+```text
+postgresql://<user>:<password>@<host>:<port>/<database>?sslmode=require
+```
+
+The same `DATABASE_URL` is used by:
+
+```text
+app.py                 Flask app runtime connection
+migrations/env.py      Alembic migrations at deploy/release time
+```
+
+`alembic.ini` intentionally does not store a real URL.
+
+### Restore runbook
+
+Use this runbook for a drill and for an actual recovery event. Always restore to
+a new/scratch instance first; do not overwrite the primary database.
+
+```text
+1. Declare incident/drill details
+      - Reason: drill / accidental delete / corrupted deploy / provider outage
+      - Desired restore point timestamp:
+      - Operator:
+      - Start time:
+
+2. In the provider console, choose one restore method
+      - Latest automated backup, or
+      - Point-in-time recovery to the selected timestamp
+
+3. Restore into a NEW database instance
+      - Name it clearly, e.g. inventory-restore-YYYYMMDD-HHMM
+      - Keep it isolated from production traffic
+      - Require TLS on the restored instance too
+
+4. Capture the restored instance connection string
+      - Store temporarily as RESTORE_DATABASE_URL outside git
+      - Ensure it includes sslmode=require if the provider requires an explicit flag
+
+5. Verify database connectivity over TLS
+      psql "$RESTORE_DATABASE_URL" -c "select current_database(), current_user, version();"
+
+6. Verify schema/migration state
+      DATABASE_URL="$RESTORE_DATABASE_URL" alembic current
+      DATABASE_URL="$RESTORE_DATABASE_URL" flask --app app db-upgrade
+
+7. Verify known data exists
+      psql "$RESTORE_DATABASE_URL" -c "select count(*) as users from users;"
+      psql "$RESTORE_DATABASE_URL" -c "select count(*) as items from items;"
+      psql "$RESTORE_DATABASE_URL" -c "select count(*) as transactions from transactions;"
+      psql "$RESTORE_DATABASE_URL" -c "select id, barcode, name from items order by id limit 1;"
+
+8. Optional app smoke test against restored DB
+      - Start app with DATABASE_URL="$RESTORE_DATABASE_URL"
+      - Log in with a non-production/test-safe account if available
+      - Open dashboard, all items, transaction history, and one item detail page
+
+9. Decide recovery action
+      - Drill: record result, then destroy scratch instance
+      - Real incident: point app DATABASE_URL to restored instance in the platform
+        secret store, redeploy/restart, and keep old primary read-only for forensics
+
+10. Record completion
+      - End time:
+      - Actual RTO:
+      - Actual restore point / data loss window:
+      - Rows checked:
+      - Operator notes:
+```
+
+### PITR drill procedure
+
+To prove point-in-time recovery, not just snapshot restore:
+
+```text
+1. In production or staging, identify a harmless known row to check.
+2. Record current timestamp T1.
+3. Make a reversible test change after T1, e.g. create a temporary item or user.
+4. Record timestamp T2 after the change.
+5. Restore to a scratch instance at T1.
+6. Confirm the temporary row/change is absent.
+7. Restore to a scratch instance at T2, or query primary, and confirm the row/change exists.
+8. Delete any temporary drill data from the primary if needed.
+```
+
+### Verification checklist
+
+```text
+[ ] Provider dashboard shows automated backups enabled.
+[ ] Provider dashboard shows PITR/WAL enabled.
+[ ] Retention window is documented.
+[ ] Backups are stored off the app host by the managed provider.
+[ ] DATABASE_URL is stored only in the platform secret store.
+[ ] DATABASE_URL requires TLS / includes sslmode=require when needed.
+[ ] Restore drill to a scratch instance succeeded.
+[ ] Schema/migration state was verified on the restored instance.
+[ ] A known row was verified on the restored instance.
+[ ] Actual RTO/RPO from the drill was recorded.
+```
+
+### Next
+
+```text
+After provider provisioning and restore drill are complete, mark Step I closed.
+Then continue Deployment Phase 3 with J2/J3/J4 for app hosting, HTTPS/domain, and
+production smoke testing.
+```
+
+---
+
 ## Implementation log — Substep H3 (Verification with volume)
 
 Date: 2026-07-08

@@ -734,3 +734,55 @@ Verification performed locally:
 [x] README and .env.example both include the same production config categories.
 [x] No real secrets were added to README or .env.example.
 ```
+
+### July 8, 2026 — Substep J1: Provision managed PostgreSQL with backups + PITR
+
+Status: Restore runbook and repo documentation completed. Actual provider
+provisioning, backup/PITR enablement, and restore drill remain operator actions
+because no production cloud/provider console is connected from this workspace.
+
+What was documented:
+
+```text
+1. Added a Step I / J1 implementation log to
+   design_docx/DATA_MIGRATIONS_RELIABILITY_PLAN.md.
+2. Documented required managed PostgreSQL settings:
+      - automated daily backups
+      - PITR/WAL enabled
+      - 7-30 day retention window
+      - backups stored off the app host
+      - TLS-required client connections
+      - least-privilege app database user
+3. Documented the production DATABASE_URL shape:
+      postgresql://<user>:<password>@<host>:<port>/<database>?sslmode=require
+4. Reconfirmed that DATABASE_URL belongs only in the platform secret store and
+   is shared by app.py and migrations/env.py.
+5. Added a restore runbook covering scratch-instance restore, TLS connectivity,
+   Alembic/schema verification, known-row checks, optional app smoke testing,
+   failover decision steps, and RTO/RPO recording.
+6. Added a PITR drill procedure that proves recovery to a timestamp before and
+   after a known test change.
+```
+
+Provider/operator checklist:
+
+```text
+[ ] Create managed PostgreSQL instance.
+[ ] Enable automated daily backups.
+[ ] Enable PITR/WAL with a documented retention window.
+[ ] Confirm backups are provider-managed/off the app host.
+[ ] Capture TLS-enabled DATABASE_URL and store it in the platform secret store.
+[ ] Run a restore drill to a scratch/restored instance.
+[ ] Confirm schema and a known row exist on the restored instance.
+[ ] Confirm the app can connect over TLS using DATABASE_URL.
+[ ] Record actual RTO/RPO from the drill.
+```
+
+Verification performed locally:
+
+```text
+[x] Restore runbook exists in design_docx/DATA_MIGRATIONS_RELIABILITY_PLAN.md.
+[x] DATABASE_URL guidance requires TLS / sslmode=require where needed.
+[x] Documentation states backups/PITR are provider/operator actions, not code.
+[x] No real database URL, password, provider token, or secret was committed.
+```
