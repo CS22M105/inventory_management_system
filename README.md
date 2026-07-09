@@ -193,13 +193,64 @@ The app includes a `Procfile` for platforms that support it:
 
 ```text
 release: alembic upgrade head
-web: gunicorn app:app
+web: gunicorn app:app -c gunicorn.conf.py
 ```
 
 The `release` line runs database migrations once per deploy, before the new web
 process starts serving traffic (see "Database migrations" below).
 
 For cloud hosting, install dependencies from `requirements.txt`, set the environment variables, run the migrations, and start the app with Gunicorn.
+
+## First Production Bootstrap
+
+On the first production deploy, let the release phase create the schema with
+Alembic migrations. Do **not** run `flask --app app init-db` against the managed
+database; `init-db` is only for local development and loads demo users from
+`schema.sql`.
+
+Before traffic is enabled, confirm the production environment has:
+
+```bash
+flask --app app check-config
+```
+
+For a brand-new managed database, the platform release phase should run:
+
+```bash
+alembic upgrade head
+```
+
+Create the first permanent administrator row directly in the managed database.
+Use the real university email address, not the placeholder value below:
+
+```bash
+psql "$DATABASE_URL" -c "INSERT INTO users (institution_id, email, name, role, department, is_active) VALUES ('A1001', 'admin@example.edu', 'Katz Administrator', 'administrator', 'Simulation Lab', TRUE);"
+```
+
+Then set the first administrator password with a one-off platform command:
+
+```bash
+flask --app app set-password admin@example.edu "replace-with-a-strong-temporary-password"
+```
+
+After this admin logs in over HTTPS, create faculty and student accounts from the
+user-management screen so the normal invite email and set-password flow is tested
+end to end. Do not ship demo/default passwords.
+
+First production smoke test checklist:
+
+- Log in as the administrator at `https://<your-domain>`.
+- Create one faculty user and one student user; confirm the invite email is
+  delivered and the set-password link works.
+- Create a test item, print its QR label, scan it on a phone, and confirm the
+  item stock page opens on the HTTPS domain.
+- Add stock and remove stock for that item.
+- Confirm the transaction appears with date, time, user, lab instructor, topic,
+  action, quantity, and notes.
+- Apply transaction filters, export the filtered CSV, then clear filters and
+  export the full CSV.
+- Check transaction pagination controls if enough rows exist.
+- Confirm no demo/default credentials are enabled in production.
 
 ## Database migrations
 

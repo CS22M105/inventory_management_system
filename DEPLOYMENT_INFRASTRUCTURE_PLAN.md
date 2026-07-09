@@ -453,6 +453,7 @@ Logs appear in the platform log stream (stdout/stderr).
 ---
 
 ## Step M — CI/CD pipeline (GitHub Actions: test then deploy)
+Continuous Integration and Continuous Deployement/Delivery.
 
 Effort: M. Makes every change tested and every deploy repeatable. Split into
 three substeps (M1–M3).
@@ -889,4 +890,64 @@ Verification pending on deployed domain:
 [ ] Response carries Strict-Transport-Security.
 [ ] Session cookies are marked Secure on the real domain.
 [ ] QR code PNG/content points to https://<domain>/items/<barcode>/stock.
+```
+
+### July 9, 2026 — Substep J4: First production bootstrap + smoke test
+
+Status: Operational runbook completed in `README.md`. Actual first bootstrap and
+smoke testing remain provider/live-domain actions because no production platform
+or managed database is connected from this workspace.
+
+What was documented:
+
+```text
+1. Added a First Production Bootstrap section to README.md.
+2. Reconfirmed that first production schema creation must happen through the
+   release-phase Alembic migration command:
+      alembic upgrade head
+3. Reconfirmed that `flask --app app init-db` must not be run against the
+   managed production database because it is local-dev bootstrap only.
+4. Documented the first-administrator bootstrap flow:
+      - insert the first admin row into the managed database
+      - use `flask --app app set-password <email> <password>` once
+      - log in over HTTPS
+      - create faculty/student users through the app so invite email and
+        set-password flow are tested normally
+5. Documented that demo/default credentials must not be shipped or enabled in
+   production.
+6. Added a manual smoke-test checklist for admin login, invite delivery,
+   set-password, item creation, QR print/scan, stock add/remove, transactions,
+   filters, CSV export, and pagination.
+7. Updated the README Procfile example so the web command matches the actual
+   production Gunicorn config:
+      gunicorn app:app -c gunicorn.conf.py
+```
+
+Operator/live verification checklist:
+
+```text
+[ ] Platform release phase runs `alembic upgrade head` successfully.
+[ ] `flask --app app init-db` is not run against the managed DB.
+[ ] First administrator row exists with role `administrator`, institution_id
+    `A1001`, is_active=true, and a real university email.
+[ ] First administrator password is set once with `flask --app app set-password`.
+[ ] Administrator can log in over HTTPS.
+[ ] Faculty invite email is delivered and set-password link works.
+[ ] Student invite email is delivered and set-password link works.
+[ ] Create item -> print QR label -> scan on phone -> stock page opens.
+[ ] Add-stock and remove-stock flows both create transaction rows.
+[ ] Transaction history filters work.
+[ ] Transaction CSV export works with filters and without filters.
+[ ] Pagination controls work when enough transactions exist.
+[ ] No demo/default credentials remain enabled.
+```
+
+Verification performed locally:
+
+```text
+[x] README now contains first production bootstrap instructions.
+[x] README clearly says production/shared DB schema is owned by migrations.
+[x] README clearly says not to run init-db against managed production DB.
+[x] README smoke-test checklist covers the critical J4 paths.
+[x] No production password, DATABASE_URL, email credential, or secret was added.
 ```
