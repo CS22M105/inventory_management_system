@@ -453,7 +453,7 @@ Logs appear in the platform log stream (stdout/stderr).
 ---
 
 ## Step M — CI/CD pipeline (GitHub Actions: test then deploy)
-Continuous Integration and Continuous Deployement/Delivery.
+Continuous Integration and Continuous Deployment/Delivery.
 
 Effort: M. Makes every change tested and every deploy repeatable. Split into
 three substeps (M1–M3).
@@ -1071,4 +1071,64 @@ Verification performed locally:
 [x] Gunicorn logs to stdout/stderr by default.
 [x] A local Gunicorn smoke test serves parallel /login requests successfully.
 [x] Existing pytest suite passes.
+```
+
+### July 9, 2026 — Substep M1: CI test workflow
+
+Status: Workflow file added. GitHub-hosted verification remains pending until
+the branch is pushed and GitHub Actions runs the workflow on a push or pull
+request.
+
+What changed:
+
+```text
+1. Added .github/workflows/ci.yml.
+2. Workflow triggers on:
+      push
+      pull_request
+3. Workflow starts a PostgreSQL 16 service container with a health check.
+4. Workflow sets the app/test database URLs to the service:
+      DATABASE_URL
+      TEST_DATABASE_URL
+      MIG_DATABASE_URL
+5. Workflow installs dependencies from requirements.txt.
+6. Workflow runs:
+      pytest -q
+7. Workflow creates a separate scratch database for an explicit migration check:
+      inventory_ci_migrations
+8. Workflow runs:
+      alembic upgrade head
+      alembic downgrade base
+9. Workflow drops the scratch migration database in an always-run cleanup step.
+```
+
+Why:
+
+```text
+Every push and pull request should prove the auth, migrations, item form, and
+pagination test suite still passes against real PostgreSQL. The explicit
+Alembic up/down check gives an extra deployment-safety signal that the migration
+chain can build and reverse on a clean database.
+```
+
+Verification performed locally:
+
+```text
+[x] Workflow file exists at .github/workflows/ci.yml.
+[x] Workflow contains push and pull_request triggers.
+[x] Workflow defines a PostgreSQL service container.
+[x] Workflow runs pytest -q.
+[x] Workflow runs alembic upgrade head and alembic downgrade base on a scratch DB.
+[x] Local scratch DB migration check passed:
+    alembic upgrade head -> alembic downgrade base.
+[x] Existing local pytest suite passes: 54 passed.
+```
+
+Verification pending on GitHub:
+
+```text
+[ ] Push/PR starts the CI workflow.
+[ ] Green CI requires the pytest suite to pass.
+[ ] Green CI requires the explicit migration up/down check to pass.
+[ ] A deliberately broken test produces a red workflow run on the PR.
 ```
