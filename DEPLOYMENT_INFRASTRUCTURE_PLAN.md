@@ -567,7 +567,7 @@ Data safety:
 [ ] Custom domain live over HTTPS; HTTP redirects to HTTPS; HSTS header present
 [ ] ProxyFix in place so the app sees correct scheme/host behind the proxy
 [ ] APP_BASE_URL=https://<domain>; QR codes encode https:// URLs
-[ ] Static assets served by WhiteNoise with cache headers
+[x] Static assets served by WhiteNoise with cache headers
 [ ] Gunicorn tuned (workers/threads/timeout) and binding to $PORT
 [ ] Flask-Limiter backed by a shared store (Redis) if running >1 worker/host
 [ ] CI runs the full pytest suite + migration up/down check on every PR
@@ -950,4 +950,63 @@ Verification performed locally:
 [x] README clearly says not to run init-db against managed production DB.
 [x] README smoke-test checklist covers the critical J4 paths.
 [x] No production password, DATABASE_URL, email credential, or secret was added.
+```
+
+### July 9, 2026 — Substep L1: WhiteNoise for static assets
+
+Status: Completed in application code and dependency list. Optional CDN remains a
+future provider/domain configuration step; no app code change should be required
+for that later.
+
+What changed:
+
+```text
+1. Added WhiteNoise to requirements.txt:
+      whitenoise>=6.7,<7.0
+2. Installed WhiteNoise into the local project virtual environment.
+3. Imported WhiteNoise in app.py.
+4. Wrapped the WSGI app with WhiteNoise immediately after the optional ProxyFix
+   wrapper:
+      app.wsgi_app = WhiteNoise(
+          app.wsgi_app,
+          root=str(BASE_DIR / "static"),
+          prefix="static/",
+          max_age=31536000,
+      )
+5. Used the absolute static directory based on BASE_DIR so Gunicorn can start
+   from any working directory without breaking static file resolution.
+6. Reused the app's HSTS header builder for WhiteNoise static responses when
+   HSTS_ENABLED is on.
+7. Generated gzip-compressed CSS variants for WhiteNoise to serve:
+      static/css/login.css.gz
+      static/css/styles.css.gz
+8. Kept all templates and `url_for('static', ...)` paths unchanged.
+```
+
+Why:
+
+```text
+WhiteNoise lets the deployed Flask/Gunicorn process serve static/css/image/js
+assets directly from lightweight middleware with long Cache-Control headers.
+This avoids routing static requests through Flask route logic or database-backed
+page handlers and makes adding a CDN later straightforward.
+```
+
+Verification performed locally:
+
+```text
+[x] WhiteNoise imports successfully from the project virtual environment.
+[x] `python -m py_compile app.py` passes.
+[x] /static/css/styles.css returns HTTP 200.
+[x] /static/css/styles.css returns Cache-Control: max-age=31536000, public.
+[x] /static/css/styles.css returns Content-Encoding: gzip when the client sends
+    Accept-Encoding: gzip.
+[x] /static/css/login.css returns HTTP 200 with long Cache-Control headers.
+[x] /static/images/YU_logo.png returns HTTP 200 with long Cache-Control headers.
+[x] /static/images/background.png returns HTTP 200 with long Cache-Control
+    headers.
+[x] Static responses include Strict-Transport-Security when production HSTS is
+    enabled.
+[x] /login still renders HTTP 200.
+[x] Existing pytest suite passes: 54 passed.
 ```

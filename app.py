@@ -2,6 +2,7 @@ from flask import Flask, Response, abort, flash, g, redirect, render_template, r
 from flask_wtf.csrf import CSRFProtect, CSRFError
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from whitenoise import WhiteNoise
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import generate_password_hash, check_password_hash
 from itsdangerous import URLSafeTimedSerializer, BadData
@@ -95,6 +96,20 @@ HSTS_INCLUDE_SUBDOMAINS = env_flag("HSTS_INCLUDE_SUBDOMAINS", False)
 HSTS_PRELOAD = env_flag("HSTS_PRELOAD", False)
 
 
+def hsts_header_value():
+    hsts_value = f"max-age={HSTS_MAX_AGE}"
+    if HSTS_INCLUDE_SUBDOMAINS:
+        hsts_value += "; includeSubDomains"
+    if HSTS_PRELOAD:
+        hsts_value += "; preload"
+    return hsts_value
+
+
+def add_static_headers(headers, path, url):
+    if HSTS_ENABLED:
+        headers.setdefault("Strict-Transport-Security", hsts_header_value())
+
+
 def validate_production_config():
     if APP_ENV != "production":
         return
@@ -124,6 +139,13 @@ if PROXY_FIX_ENABLED:
         x_port=1,
         x_prefix=1,
     )
+app.wsgi_app = WhiteNoise(
+    app.wsgi_app,
+    root=str(BASE_DIR / "static"),
+    prefix="static/",
+    max_age=31536000,
+    add_headers_function=add_static_headers,
+)
 
 app.config["SECRET_KEY"] = SECRET_KEY or DEV_SECRET_KEY
 app.config["SESSION_COOKIE_HTTPONLY"] = True
@@ -159,12 +181,7 @@ limiter.enabled = RATELIMIT_ENABLED
 @app.after_request
 def add_security_headers(response):
     if HSTS_ENABLED and request.is_secure:
-        hsts_value = f"max-age={HSTS_MAX_AGE}"
-        if HSTS_INCLUDE_SUBDOMAINS:
-            hsts_value += "; includeSubDomains"
-        if HSTS_PRELOAD:
-            hsts_value += "; preload"
-        response.headers.setdefault("Strict-Transport-Security", hsts_value)
+        response.headers.setdefault("Strict-Transport-Security", hsts_header_value())
 
     return response
 
