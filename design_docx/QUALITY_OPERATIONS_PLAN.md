@@ -52,12 +52,17 @@ Refactor timing:   Blueprint split is NOT a launch blocker; do it when feature
 What already exists:
 
 ```text
-Automated tests (54 passing as of Phase 2 H3):
+Automated tests (80 passing as of July 9, 2026):
     tests/test_auth.py                  (37) — login, invite/reset, roles, sudo,
                                               lockout, rate limits
     tests/test_migrations.py            (3)  — Alembic upgrade/downgrade, indexes
     tests/test_item_form.py             (5)  — expiration DATE add/edit/detail/label
     tests/test_transactions_pagination.py (9)— pagination math, EXPLAIN index usage
+    tests/test_stock.py                 (16) — scan/item stock add-remove, validation,
+                                              unknown barcodes, transaction fields
+    tests/test_permissions.py           (6)  — student/faculty/admin route permissions
+                                              and protected administrator rules
+    tests/test_exports.py               (4)  — transaction/report CSV exports and filters
     tests/conftest.py                        — shared DB fixtures, CSRF off in tests
 
 CI (Phase 3 M1):
@@ -73,30 +78,35 @@ Observability today:
     /db-status                          — HTML page for system administrators only;
                                         counts users/items/transactions; NOT suitable
                                         for load balancers or uptime monitors
-    Flask/Werkzeug default logging      — unstructured text to stderr
-    No Sentry or external error tracking
+    Sentry                              — optional Flask integration when SENTRY_DSN
+                                        is configured; disabled by default locally
+    Structured request logging          — readable text in development, JSON lines in
+                                        production, with request_id correlation
     No dedicated /health JSON endpoint
 ```
 
-Gaps this phase fixes:
+Gaps this phase fixes/fixed:
 
 ```text
-1. Test coverage holes.
+1. Test coverage holes. (DONE in Step N)
    Auth, migrations, item forms, and transaction pagination are well covered, but
    stock add/remove (process_stock_transaction), item-manager permissions (faculty
    vs student on /items/new, /scan), CSV exports, and admin user deactivate/delete
-   flows lack dedicated regression tests. A stock bug could ship despite 54 green
+   flows needed dedicated regression tests. Step N added tests/test_stock.py,
+   tests/test_permissions.py, and tests/test_exports.py; the suite is now 80
    tests.
 
-2. No production error visibility.
-   Uncaught exceptions in Gunicorn workers are only visible in platform logs if
-   someone is watching. There is no alerting, grouping, or stack-trace collection.
+2. No production error visibility. (DONE in Step O, pending real Sentry DSN)
+   Uncaught exceptions in Gunicorn workers should not rely only on someone
+   watching platform logs. Step O added optional Sentry integration and structured
+   request/error logging. A real Sentry event still needs staging/production DSN
+   verification.
 
-3. No operator-friendly health signal.
+3. No operator-friendly health signal. (TODO in Step P)
    Uptime monitors and load balancers need a fast, unauthenticated 200/503 JSON
    endpoint. /db-status requires admin login and returns HTML.
 
-4. Monolithic app.py.
+4. Monolithic app.py. (TODO/post-launch in Step Q)
    Every feature change touches the same ~2,000-line file. This is manageable for
    a single maintainer today but becomes risky as the product grows.
 ```
@@ -107,8 +117,8 @@ Gaps this phase fixes:
 
 | # | Improvement | Priority | Effort | Plan step | Status |
 |---|-------------|----------|--------|-----------|--------|
-| 1 | Automated test suite (pytest) for auth, stock, and permissions | High | M | Step N | **Partial** — 54 tests exist; stock/permissions/export gaps remain |
-| 2 | Error monitoring (Sentry) + structured logging | High | S | Step O | To do |
+| 1 | Automated test suite (pytest) for auth, stock, and permissions | High | M | Step N | **Done** — stock, permissions, exports, and README test contract added; 80 tests passing |
+| 2 | Error monitoring (Sentry) + structured logging | High | S | Step O | **Done** — optional Sentry, request logging, and observability docs added |
 | 3 | Health-check endpoint + uptime monitoring | Medium | S | Step P | To do |
 | 4 | Split `app.py` into blueprints + service layer | Medium | L | Step Q | To do (post-launch acceptable) |
 
@@ -136,13 +146,13 @@ An uptime monitor (UptimeRobot, Better Stack, Pingdom, or the host's built-in
 
 ## Recommended execution order
 
-Observability (O, P) should land soon after the first production deploy so real
-users are covered. Test expansion (N) can run in parallel with early production
-use. The blueprint refactor (Q) is the largest change and should not block launch.
+Step N and Step O are now implemented. Step P should land soon after the first
+production deploy so uptime monitoring can watch the live app. The blueprint
+refactor (Q) is the largest change and should not block launch.
 
 ```text
-Step N  Expand pytest coverage (stock, permissions, exports)     [can start now]
-Step O  Sentry + structured logging                              [soon after deploy]
+Step N  Expand pytest coverage (stock, permissions, exports)     [done]
+Step O  Sentry + structured logging                              [done in code/docs]
 Step P  /health endpoint + uptime monitor                        [soon after deploy]
 Step Q  Blueprint / service-layer refactor                       [when needed; not a blocker]
 ```
@@ -151,7 +161,7 @@ Step Q  Blueprint / service-layer refactor                       [when needed; n
 
 ## Step N — Expand automated test suite (pytest)
 
-Effort: M. A strong foundation exists (54 tests + CI); this step closes the
+Effort: M. A strong foundation existed (54 tests + CI); this step closed the
 remaining gaps called out in the production-readiness review. Split into four
 substeps (N1–N4).
 
@@ -188,6 +198,38 @@ pytest tests/test_stock.py -v  -> all green.
 Full suite still passes (pytest -q).
 ```
 
+Implementation details — July 9, 2026:
+
+```text
+Status: DONE.
+
+Files changed:
+    tests/test_stock.py   (new)
+
+What was implemented:
+    Added dedicated HTTP-level regression tests for both stock entry points:
+        - POST /scan
+        - POST /items/<barcode>/stock
+    Covered add-stock and remove-stock behavior, over-removal protection,
+    missing required transaction context, unknown barcodes, and transaction-row
+    persistence.
+
+Why:
+    The scan page and QR/item stock page share process_stock_transaction().
+    Testing both URLs protects the core inventory movement workflow from
+    regressions while still exercising the application the way a user does.
+
+How:
+    The tests use the shared PostgreSQL fixtures from tests/conftest.py and log in
+    as seeded users instead of relying on schema.sql demo credentials. Each test
+    posts realistic form data with lab instructor, topic of day, notes, action,
+    and quantity, then verifies the database state directly.
+
+Verification completed:
+    pytest tests/test_stock.py -v  -> 16 passed.
+    pytest -q                     -> full suite passed after the Step N work.
+```
+
 ### Substep N2 — Permissions regression tests
 
 Files:
@@ -221,6 +263,35 @@ No test relies on hard-coded seeded institution IDs from schema.sql demo users;
     use the conftest `users` fixture emails/passwords.
 ```
 
+Implementation details — July 9, 2026:
+
+```text
+Status: DONE.
+
+Files changed:
+    tests/test_permissions.py   (new)
+
+What was implemented:
+    Added route-level permission tests for students, faculty, and administrators.
+    The tests verify page access for item views, scan/stock routes, admin users,
+    database status, report export, QR label generation, and QR image generation.
+    They also cover the role rules around deactivating/deleting users.
+
+Why:
+    The product now has different authorities for student, faculty, and admin
+    users. These rules are business-critical, so they need regression tests beyond
+    the general authentication tests.
+
+How:
+    The tests use GET requests for page-level access checks and small POST smoke
+    checks for mutating account actions, with CSRF disabled by the shared test
+    fixture. They use the conftest-created users and avoid hard-coded demo IDs.
+
+Verification completed:
+    pytest tests/test_permissions.py -v  -> 6 passed.
+    pytest -q                            -> full suite passed after the Step N work.
+```
+
 ### Substep N3 — Export and report smoke tests
 
 Files:
@@ -247,6 +318,38 @@ pytest tests/test_exports.py -v  -> all green.
 Export responses are NOT paginated (full filtered set) — regression guard for H2.
 ```
 
+Implementation details — July 9, 2026:
+
+```text
+Status: DONE.
+
+Files changed:
+    tests/test_exports.py   (new)
+
+What was implemented:
+    Added CSV smoke tests for:
+        - GET /transactions/export
+        - GET /transactions/export?item_id=<id>
+        - GET /reports/export
+        - unauthenticated redirects to /login
+    The tests parse CSV using Python's csv module and verify headers, row counts,
+    filtered results, and non-paginated export behavior.
+
+Why:
+    Transaction history and inventory exports are operational reporting features.
+    These tests make sure future pagination or filter changes do not silently
+    break downloadable CSV output.
+
+How:
+    The tests seed enough transaction data to prove export endpoints return the
+    full filtered result set instead of only the current page. They log in with
+    appropriate roles and compare returned rows against seeded database records.
+
+Verification completed:
+    pytest tests/test_exports.py -v  -> 4 passed.
+    pytest -q                       -> 80 passed.
+```
+
 ### Substep N4 — Document the test contract in README
 
 Files:
@@ -271,6 +374,36 @@ Verify:
 
 ```text
 A new contributor can run the suite from README instructions alone.
+```
+
+Implementation details — July 9, 2026:
+
+```text
+Status: DONE.
+
+Files changed:
+    README.md
+
+What was implemented:
+    Added a "Running Tests" section with:
+        - pytest -q
+        - TEST_DATABASE_URL override for a local PostgreSQL test database
+        - MIG_DATABASE_URL override for migration-specific tests
+        - note that tests require PostgreSQL and createdb/dropdb permissions
+        - a table explaining what each test module covers
+        - a pointer to .github/workflows/ci.yml for automatic push/PR testing
+
+Why:
+    A production-grade project needs repeatable contributor instructions. The test
+    suite is only useful if a new developer/operator can run it without guessing
+    which database or command is expected.
+
+How:
+    README.md now documents the same PostgreSQL-based test contract used by the
+    local suite and CI workflow.
+
+Verification completed:
+    git diff --check -- README.md  -> clean.
 ```
 
 ---
@@ -313,6 +446,45 @@ With a test DSN (or Sentry dev project): a deliberate test exception appears in
 py_compile clean; pytest suite still passes (Sentry must not break tests).
 ```
 
+Implementation details — July 9, 2026:
+
+```text
+Status: DONE.
+
+Files changed:
+    requirements.txt
+    app.py
+    .env.example
+
+What was implemented:
+    Added sentry-sdk[flask] and initialized Sentry only when SENTRY_DSN is set.
+    The integration uses FlaskIntegration, APP_ENV as the Sentry environment,
+    SENTRY_TRACES_SAMPLE_RATE for tracing, and send_default_pii=False.
+    The flask check-config command also reports whether SENTRY_DSN is configured
+    without printing the DSN value.
+
+Why:
+    Production failures need stack traces and grouping instead of only raw
+    platform logs. Keeping Sentry disabled when the DSN is blank preserves local
+    development behavior and prevents accidental network calls during tests.
+
+How:
+    app.py reads SENTRY_DSN and SENTRY_TRACES_SAMPLE_RATE from the environment,
+    validates the sample-rate value through a small helper, and calls
+    sentry_sdk.init() only when a DSN exists. .env.example documents the variables
+    with blank/redacted defaults.
+
+Verification completed:
+    With SENTRY_DSN unset: app starts and Sentry is not initialized.
+    With a dummy/test DSN: Sentry initialization path is active.
+    python -m py_compile app.py  -> clean.
+    pytest -q                   -> 80 passed.
+
+Remaining operational verification:
+    A real Sentry dashboard event requires a real project DSN in staging or
+    production, so that part must be confirmed during deployment.
+```
+
 ### Substep O2 — Structured request logging
 
 Files:
@@ -346,6 +518,46 @@ With APP_ENV=production (locally): log lines are valid JSON objects.
 A 500 test route (dev only, or in a test) produces an ERROR log line + Sentry event.
 ```
 
+Implementation details — July 9, 2026:
+
+```text
+Status: DONE.
+
+Files changed:
+    app.py
+
+What was implemented:
+    Added structured request logging with:
+        - JSON lines in production
+        - readable plain text in development
+        - per-request request_id stored on flask.g
+        - X-Request-ID response header
+        - method, path, status, duration_ms, remote_addr, and request_id fields
+        - INFO logs for normal completions
+        - WARNING logs for 4xx responses
+        - ERROR logs for unhandled exceptions
+    The request_id is also attached as a Sentry tag when Sentry is enabled.
+
+Why:
+    Operators need to identify slow/failing requests and correlate platform logs
+    with Sentry events. JSON in production makes logs searchable by fields, while
+    text logs remain easy to read during local development.
+
+How:
+    app.py uses stdlib logging only: a small JsonLineFormatter for production, a
+    plain formatter for development, before_request/after_request hooks for
+    completion logs, and got_request_exception for exception logs. The log payload
+    intentionally excludes passwords, cookies, CSRF tokens, invite/reset token
+    values, request bodies, and form data.
+
+Verification completed:
+    Local development request logs were readable plain text.
+    APP_ENV=production request logs parsed as valid JSON objects.
+    A temporary test 500 route produced an ERROR log and completion log.
+    python -m py_compile app.py  -> clean.
+    pytest -q                   -> 80 passed.
+```
+
 ### Substep O3 — Document observability setup
 
 Files:
@@ -368,6 +580,40 @@ Verify:
 
 ```text
 Operator can follow the doc to enable Sentry on a staging deploy.
+```
+
+Implementation details — July 9, 2026:
+
+```text
+Status: DONE.
+
+Files changed:
+    README.md
+    .env.example
+
+What was implemented:
+    Added README observability documentation covering:
+        - how to create a Sentry project
+        - how to set SENTRY_DSN and SENTRY_TRACES_SAMPLE_RATE on the host
+        - how to verify the first staging event
+        - what structured logs look like in development and production
+        - how to read logs on Render/Railway-style platform log streams
+        - what is intentionally not logged
+    .env.example documents Sentry variables with blank/redacted local defaults.
+
+Why:
+    Error monitoring is only useful when an operator can enable and verify it
+    safely. The docs also make the privacy posture explicit.
+
+How:
+    README.md now has a dedicated Observability section and the production config
+    table includes SENTRY_DSN and SENTRY_TRACES_SAMPLE_RATE. .env.example keeps
+    real DSNs out of git and points production operators to the platform secret
+    store.
+
+Verification completed:
+    git diff --check -- README.md .env.example  -> clean.
+    Scanned the docs for secret-like values; only placeholders are present.
 ```
 
 ---
@@ -584,10 +830,10 @@ After Step Q (if done):
 ## Pre-launch quality checklist (Phase 4)
 
 ```text
-[ ] pytest suite covers stock add/remove, permissions, and CSV exports (Step N)
+[x] pytest suite covers stock add/remove, permissions, and CSV exports (Step N)
 [ ] CI blocks merge on failing tests (already true if branch protection enabled)
 [ ] SENTRY_DSN set on production; test exception received in Sentry (Step O)
-[ ] Structured JSON logs visible in platform log drain (Step O)
+[x] Structured JSON logs implemented; platform log-drain visibility to confirm after deploy (Step O)
 [ ] GET /health returns 200 with database ok; 503 when DB down (Step P)
 [ ] External uptime monitor alerts on failure (Step P)
 [ ] (Optional pre-launch) Blueprint refactor started only if team capacity allows (Step Q)
