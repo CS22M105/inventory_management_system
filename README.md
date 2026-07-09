@@ -297,6 +297,32 @@ alembic downgrade -1
 Migrations should run in the release phase or as an intentional operator action,
 never inside request handlers.
 
+## GitHub Protection and Secrets
+
+Before production use, protect the default branch in GitHub:
+
+1. Go to the repository on GitHub.
+2. Open **Settings > Branches > Branch protection rules**.
+3. Add a rule for `master` now, or `main` if the repository is renamed later.
+4. Enable **Require status checks to pass before merging**.
+5. Select the CI check, shown as `CI / Test and migrations` or `Test and migrations`.
+6. Enable **Require branches to be up to date before merging**.
+7. Optionally enable **Require a pull request before merging** and require one
+   reviewer for production changes.
+8. Do not allow force pushes or branch deletion on the protected branch.
+
+For deployment secrets:
+
+1. Open **Settings > Secrets and variables > Actions**.
+2. Add `DEPLOY_HOOK_URL` as a repository secret, or store it under the
+   `production` environment if environment-level approval is preferred.
+3. Open **Settings > Environments** and create `production`.
+4. Add required reviewers to `production` if deployment approval should be manual.
+5. Restrict deployment branches to `master` or `main`.
+
+Never commit provider deploy tokens, SMTP passwords, database URLs, or production
+`SECRET_KEY` values to workflow YAML, README, `.env.example`, or app code.
+
 ## Database migrations
 
 Schema changes are managed with [Alembic](https://alembic.sqlalchemy.org/) in

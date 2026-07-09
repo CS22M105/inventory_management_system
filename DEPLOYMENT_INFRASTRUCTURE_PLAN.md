@@ -1200,3 +1200,81 @@ Verification pending on GitHub/provider:
 [ ] Provider runs release phase before serving the new version.
 [ ] No-migration redeploy is a safe no-op and the app remains up.
 ```
+
+### July 9, 2026 — Substep M3: Repo protection + secrets
+
+Status: GitHub settings runbook documented. Actual branch protection,
+environment protection, and secret creation must be completed in the GitHub web
+UI by a repository administrator because the GitHub CLI is not installed in this
+local environment.
+
+What was documented:
+
+```text
+1. Added README GitHub Protection and Secrets instructions.
+2. Documented branch protection for the current default branch:
+      master
+   and noted that the same rule should apply to main if the repository is later
+   renamed from master to main.
+3. Documented required status checks:
+      CI / Test and migrations
+   or the equivalent displayed check name:
+      Test and migrations
+4. Documented requiring branches to be up to date before merge.
+5. Documented optional pull-request review before merge.
+6. Documented disabling force pushes and protected-branch deletion.
+7. Documented storing DEPLOY_HOOK_URL in GitHub Actions secrets or the
+   production environment, never in workflow YAML.
+8. Documented creating a GitHub production environment with optional required
+   reviewers and deployment branch restrictions.
+9. Reconfirmed that provider tokens, SMTP passwords, DATABASE_URL, and
+   production SECRET_KEY values must never be committed.
+```
+
+Why:
+
+```text
+Branch protection prevents accidental or untested production changes from
+merging. Required CI checks make the 54-test suite and migration up/down checks
+part of the merge gate. GitHub Actions secrets/environments keep deploy tokens
+out of git and make production deployment approval possible.
+```
+
+Operator steps to complete in GitHub:
+
+```text
+1. Settings > Branches > Branch protection rules.
+2. Add rule for master (and main later if the branch is renamed).
+3. Enable "Require status checks to pass before merging".
+4. Select CI / Test and migrations.
+5. Enable "Require branches to be up to date before merging".
+6. Optionally require pull request review.
+7. Disable force pushes and branch deletion.
+8. Settings > Secrets and variables > Actions.
+9. Add DEPLOY_HOOK_URL as a secret, or store it under the production
+   environment.
+10. Settings > Environments > production.
+11. Add required reviewers if production deploys need approval.
+12. Restrict deployment branches to master/main.
+```
+
+Verification performed locally:
+
+```text
+[x] README documents branch protection and required CI checks.
+[x] README documents DEPLOY_HOOK_URL storage in secrets/environments.
+[x] README says not to commit provider deploy tokens, SMTP passwords,
+    DATABASE_URL, or production SECRET_KEY.
+[x] Workflow files reference GitHub secrets by name only.
+[x] No production secret values were added to workflow YAML.
+```
+
+Verification pending on GitHub:
+
+```text
+[ ] A PR cannot merge to master/main while CI is failing.
+[ ] DEPLOY_HOOK_URL exists as a GitHub Actions secret or production environment
+    secret.
+[ ] The production environment is protected if deploy approval is required.
+[ ] Workflow logs do not print secret values.
+```
