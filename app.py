@@ -1,4 +1,4 @@
-from flask import Flask, Response, abort, flash, g, redirect, render_template, request, session, url_for
+from flask import Flask, Response, abort, flash, g, got_request_exception, redirect, render_template, request, session, url_for
 from flask_wtf.csrf import CSRFProtect, CSRFError
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -9,15 +9,19 @@ from itsdangerous import URLSafeTimedSerializer, BadData
 import csv
 from email.message import EmailMessage
 import io
+import json
+import logging
 import os
 import psycopg2
 import qrcode
 import sentry_sdk
 import smtplib
+import sys
 from psycopg2.extras import RealDictCursor
 from sentry_sdk.integrations.flask import FlaskIntegration
 import click
 import time
+import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -134,6 +138,70 @@ def initialize_sentry():
     )
 
 
+LOG_EXTRA_FIELDS = (
+    "request_id",
+    "method",
+    "path",
+    "status",
+    "duration_ms",
+    "remote_addr",
+    "error_type",
+)
+
+
+class JsonLineFormatter(logging.Formatter):
+    def format(self, record):
+        payload = {
+            "timestamp": self.formatTime(record, "%Y-%m-%dT%H:%M:%S%z"),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+        }
+        for field in LOG_EXTRA_FIELDS:
+            if hasattr(record, field):
+                payload[field] = getattr(record, field)
+        if record.exc_info:
+            payload["exception"] = self.formatException(record.exc_info)
+        return json.dumps(payload, default=str, separators=(",", ":"))
+
+
+class PlainTextFormatter(logging.Formatter):
+    def format(self, record):
+        timestamp = self.formatTime(record, "%Y-%m-%d %H:%M:%S")
+        pieces = [
+            timestamp,
+            record.levelname,
+            record.name,
+            record.getMessage(),
+        ]
+        for field in LOG_EXTRA_FIELDS:
+            if hasattr(record, field):
+                pieces.append(f"{field}={getattr(record, field)}")
+        if record.exc_info:
+            pieces.append(self.formatException(record.exc_info))
+        return " ".join(str(piece) for piece in pieces)
+
+
+def configure_logging(flask_app):
+    formatter = JsonLineFormatter() if APP_ENV == "production" else PlainTextFormatter()
+
+    for logger in (
+        flask_app.logger,
+        logging.getLogger("inventory.request"),
+        logging.getLogger("inventory.error"),
+    ):
+        logger.handlers.clear()
+        handler = logging.StreamHandler(sys.stdout)
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+        logger.setLevel(logging.INFO)
+        logger.propagate = False
+
+
+request_logger = logging.getLogger("inventory.request")
+error_logger = logging.getLogger("inventory.error")
+
+
 def hsts_header_value():
     hsts_value = f"max-age={HSTS_MAX_AGE}"
     if HSTS_INCLUDE_SUBDOMAINS:
@@ -169,6 +237,7 @@ validate_production_config()
 initialize_sentry()
 
 app = Flask(__name__)
+configure_logging(app)
 if PROXY_FIX_ENABLED:
     app.wsgi_app = ProxyFix(
         app.wsgi_app,
@@ -215,6 +284,72 @@ limiter = Limiter(
     headers_enabled=True,
 )
 limiter.enabled = RATELIMIT_ENABLED
+
+
+def get_request_id():
+    return getattr(g, "request_id", "-")
+
+
+def get_remote_client_addr():
+    forwarded_for = request.headers.get("X-Forwarded-For", "")
+    if forwarded_for:
+        return forwarded_for.split(",", 1)[0].strip()
+    return request.remote_addr or ""
+
+
+def request_log_extra(status=None, duration_ms=None, error_type=None):
+    extra = {
+        "request_id": get_request_id(),
+        "method": request.method,
+        "path": request.path,
+        "remote_addr": get_remote_client_addr(),
+    }
+    if status is not None:
+        extra["status"] = status
+    if duration_ms is not None:
+        extra["duration_ms"] = duration_ms
+    if error_type is not None:
+        extra["error_type"] = error_type
+    return extra
+
+
+@app.before_request
+def start_request_log_context():
+    g.request_id = uuid.uuid4().hex[:12]
+    g.request_started_at = time.perf_counter()
+    if sentry_sdk.is_initialized():
+        sentry_sdk.set_tag("request_id", g.request_id)
+
+
+@app.after_request
+def log_request_completion(response):
+    started_at = getattr(g, "request_started_at", None)
+    duration_ms = None
+    if started_at is not None:
+        duration_ms = round((time.perf_counter() - started_at) * 1000, 2)
+
+    response.headers.setdefault("X-Request-ID", get_request_id())
+    level = logging.WARNING if 400 <= response.status_code < 500 else logging.INFO
+    request_logger.log(
+        level,
+        "request_completed",
+        extra=request_log_extra(
+            status=response.status_code,
+            duration_ms=duration_ms,
+        ),
+    )
+    return response
+
+
+def log_unhandled_exception(sender, exception, **extra):
+    error_logger.error(
+        "unhandled_exception",
+        exc_info=(type(exception), exception, exception.__traceback__),
+        extra=request_log_extra(error_type=type(exception).__name__),
+    )
+
+
+got_request_exception.connect(log_unhandled_exception, app)
 
 
 @app.after_request
