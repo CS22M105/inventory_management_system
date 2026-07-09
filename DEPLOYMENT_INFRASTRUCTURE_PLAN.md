@@ -1132,3 +1132,71 @@ Verification pending on GitHub:
 [ ] Green CI requires the explicit migration up/down check to pass.
 [ ] A deliberately broken test produces a red workflow run on the PR.
 ```
+
+### July 9, 2026 — Substep M2: Deploy on green main/master
+
+Status: Provider-neutral deploy workflow and rollback documentation added.
+Actual live deployment verification remains pending until the hosting provider
+deploy hook is created and stored in GitHub Actions secrets.
+
+What changed:
+
+```text
+1. Added .github/workflows/deploy.yml.
+2. The deploy workflow is triggered by completion of the CI workflow.
+3. Deployment runs only when:
+      - CI conclusion is success
+      - the CI run came from a push event
+      - the pushed branch is main or master
+4. Pull requests do not deploy.
+5. The job uses the GitHub production environment.
+6. The job checks that Procfile still contains:
+      release: alembic upgrade head
+      web: gunicorn app:app -c gunicorn.conf.py
+7. The job calls a provider deploy hook using the GitHub Actions secret:
+      DEPLOY_HOOK_URL
+8. If DEPLOY_HOOK_URL is not configured, the deploy job fails loudly instead of
+   silently pretending to deploy.
+9. Added README Deployment and Rollback notes.
+```
+
+Why:
+
+```text
+The hosting provider is not finalized yet, so this uses a deploy-hook pattern
+that works with many platform-native Git deploy systems. The provider remains
+responsible for pulling the repository, running the Procfile release phase once,
+and starting the Gunicorn web process.
+```
+
+Rollback documented:
+
+```text
+1. Prefer redeploying the previous good platform release / previous good commit.
+2. If a migration must be reversed, test it first on a scratch/restored database.
+3. Only after the scratch test passes, run:
+      alembic downgrade -1
+```
+
+Verification performed locally:
+
+```text
+[x] deploy.yml exists.
+[x] deploy.yml listens for completed CI workflow runs.
+[x] deploy.yml deploys only after successful CI.
+[x] deploy.yml deploys only for push events, not pull_request events.
+[x] deploy.yml supports both main and master default-branch naming.
+[x] deploy.yml checks the Procfile release and web commands.
+[x] deploy.yml uses DEPLOY_HOOK_URL from GitHub Actions secrets.
+[x] README documents release-phase migrations and rollback.
+```
+
+Verification pending on GitHub/provider:
+
+```text
+[ ] Configure DEPLOY_HOOK_URL as a GitHub Actions secret.
+[ ] Configure/approve the production GitHub Environment if required.
+[ ] Push to main/master after green CI triggers the deploy workflow.
+[ ] Provider runs release phase before serving the new version.
+[ ] No-migration redeploy is a safe no-op and the app remains up.
+```

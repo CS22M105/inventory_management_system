@@ -262,6 +262,41 @@ First production smoke test checklist:
 - Check transaction pagination controls if enough rows exist.
 - Confirm no demo/default credentials are enabled in production.
 
+## Deployment and Rollback
+
+The app is designed for platform-native deployment from Git. The `Procfile`
+release phase runs migrations once before the new web process serves traffic:
+
+```text
+release: alembic upgrade head
+web: gunicorn app:app -c gunicorn.conf.py
+```
+
+GitHub Actions includes an optional deployment workflow:
+
+```text
+.github/workflows/deploy.yml
+```
+
+It runs only after the `CI` workflow succeeds on a push to `main` or `master`.
+Store the hosting provider's deploy-hook URL as a GitHub Actions secret named
+`DEPLOY_HOOK_URL`. Do not put deploy tokens or provider URLs directly in the
+workflow file.
+
+Rollback procedure:
+
+1. Redeploy the previous good platform release or previous good Git commit.
+2. If a database migration must be reversed, first test the rollback on a
+   scratch/restored database.
+3. Only after the scratch test passes, run:
+
+```bash
+alembic downgrade -1
+```
+
+Migrations should run in the release phase or as an intentional operator action,
+never inside request handlers.
+
 ## Database migrations
 
 Schema changes are managed with [Alembic](https://alembic.sqlalchemy.org/) in

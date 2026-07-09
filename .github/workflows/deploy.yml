@@ -1,0 +1,55 @@
+name: Deploy
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy after green CI
+    runs-on: ubuntu-latest
+    environment: production
+    if: >-
+      ${{
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push' &&
+        (
+          github.event.workflow_run.head_branch == 'main' ||
+          github.event.workflow_run.head_branch == 'master'
+        )
+      }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Confirm release-phase migrations are configured
+        run: |
+          grep -F "release: alembic upgrade head" Procfile
+          grep -F "web: gunicorn app:app -c gunicorn.conf.py" Procfile
+
+      - name: Trigger platform deploy hook
+        env:
+          DEPLOY_HOOK_URL: ${{ secrets.DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$DEPLOY_HOOK_URL" ]; then
+            echo "DEPLOY_HOOK_URL is not configured."
+            echo "Add the hosting provider deploy-hook URL as a GitHub Actions secret."
+            exit 1
+          fi
+
+          curl --fail --show-error --silent --request POST "$DEPLOY_HOOK_URL"
+
+      - name: Deployment note
+        run: |
+          echo "Deploy hook accepted."
+          echo "The hosting platform should run the Procfile release phase once:"
+          echo "  alembic upgrade head"
+          echo "Then it should start:"
+          echo "  gunicorn app:app -c gunicorn.conf.py"
