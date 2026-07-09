@@ -57,7 +57,7 @@ What already exists in the repo:
 ```text
 Procfile
     release: alembic upgrade head        # migrations run once per deploy (Phase 2 F4)
-    web: gunicorn app:app                # single default Gunicorn process
+    web: gunicorn app:app -c gunicorn.conf.py
 
 app.py config
     APP_ENV        = os.environ["APP_ENV"] (default "development")
@@ -785,4 +785,51 @@ Verification performed locally:
 [x] DATABASE_URL guidance requires TLS / sslmode=require where needed.
 [x] Documentation states backups/PITR are provider/operator actions, not code.
 [x] No real database URL, password, provider token, or secret was committed.
+```
+
+### July 8, 2026 — Substep J2: Configure the app for the platform
+
+Status: Completed for Procfile/Gunicorn platform configuration. Live clean-deploy
+verification remains a provider action because no production platform is
+connected from this workspace.
+
+What changed:
+
+```text
+1. Confirmed Procfile release phase still runs:
+      alembic upgrade head
+   This runs migrations once per deploy before the web process serves traffic.
+2. Added gunicorn.conf.py with environment-driven production defaults:
+      bind                  0.0.0.0:$PORT, fallback 8000
+      GUNICORN_WORKERS      override worker count
+      GUNICORN_THREADS      override thread count
+      GUNICORN_TIMEOUT      override request timeout
+      GUNICORN_GRACEFUL_TIMEOUT
+      GUNICORN_KEEPALIVE
+      GUNICORN_ACCESSLOG / GUNICORN_ERRORLOG / GUNICORN_LOGLEVEL
+3. Updated Procfile web command to:
+      gunicorn app:app -c gunicorn.conf.py
+4. Confirmed runtime config continues to come from environment variables; no
+   app-runtime file writes are required. QR PNGs are generated in memory.
+```
+
+Provider/operator verification checklist:
+
+```text
+[ ] Clean deploy to an empty managed PostgreSQL database.
+[ ] Release phase runs alembic upgrade head and reaches migration head.
+[ ] Web process boots with gunicorn app:app -c gunicorn.conf.py.
+[ ] Gunicorn binds to the platform-provided PORT.
+[ ] Redeploy with no new migrations is a release-phase no-op.
+[ ] Platform/pre-domain URL returns HTTP 200 for /login.
+```
+
+Verification performed locally:
+
+```text
+[x] Procfile release command remains alembic upgrade head.
+[x] Procfile web command uses gunicorn.conf.py.
+[x] gunicorn.conf.py reads PORT and binds to 0.0.0.0:<port>.
+[x] gunicorn.conf.py compiles.
+[x] Gunicorn config check succeeds.
 ```
