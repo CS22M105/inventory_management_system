@@ -119,7 +119,7 @@ Gaps this phase fixes/fixed:
 |---|-------------|----------|--------|-----------|--------|
 | 1 | Automated test suite (pytest) for auth, stock, and permissions | High | M | Step N | **Done** — stock, permissions, exports, and README test contract added; 80 tests passing |
 | 2 | Error monitoring (Sentry) + structured logging | High | S | Step O | **Done** — optional Sentry, request logging, and observability docs added |
-| 3 | Health-check endpoint + uptime monitoring | Medium | S | Step P | To do |
+| 3 | Health-check endpoint + uptime monitoring | Medium | S | Step P | **Partial** — `/health` JSON endpoint and tests added; external uptime monitor pending |
 | 4 | Split `app.py` into blueprints + service layer | Medium | L | Step Q | To do (post-launch acceptable) |
 
 Cross-reference — already done elsewhere:
@@ -153,7 +153,7 @@ refactor (Q) is the largest change and should not block launch.
 ```text
 Step N  Expand pytest coverage (stock, permissions, exports)     [done]
 Step O  Sentry + structured logging                              [done in code/docs]
-Step P  /health endpoint + uptime monitor                        [soon after deploy]
+Step P  /health endpoint + uptime monitor                        [P1 done, P2 pending]
 Step Q  Blueprint / service-layer refactor                       [when needed; not a blocker]
 ```
 
@@ -656,6 +656,42 @@ Endpoint works without a session cookie.
 pytest: one test in tests/test_health.py (new) for 200 + JSON shape.
 ```
 
+Implementation details — July 9, 2026:
+
+```text
+Status: DONE.
+
+Files changed:
+    app.py
+    tests/test_health.py   (new)
+
+What was implemented:
+    Added an unauthenticated GET /health endpoint that returns JSON only:
+        - 200 with {"status": "ok", "database": "ok"} when the app can reach
+          PostgreSQL
+        - 503 with {"status": "error", "database": "error"} when the database
+          check fails
+    The endpoint runs only a lightweight SELECT 1 check and does not return
+    counts, user data, connection strings, schema details, or secrets.
+
+Why:
+    Hosting platforms, load balancers, and uptime monitors need a fast machine
+    endpoint that does not require an admin login. /db-status remains the human
+    administrator page; /health is only the operational signal.
+
+How:
+    app.py imports jsonify and adds a public /health route near the other public
+    routes. It uses get_db().execute("SELECT 1").fetchone() inside a try/except
+    block. The app has no global Flask-Limiter default limits, so /health is not
+    rate-limited by default and can safely be polled every 30-60 seconds.
+
+Verification completed:
+    python -m py_compile app.py              -> clean.
+    git diff --check -- app.py tests/test_health.py  -> clean.
+    pytest tests/test_health.py -v           -> 2 passed.
+    pytest -q                                -> 82 passed.
+```
+
 ### Substep P2 — Wire uptime monitoring
 
 Files:
@@ -834,7 +870,7 @@ After Step Q (if done):
 [ ] CI blocks merge on failing tests (already true if branch protection enabled)
 [ ] SENTRY_DSN set on production; test exception received in Sentry (Step O)
 [x] Structured JSON logs implemented; platform log-drain visibility to confirm after deploy (Step O)
-[ ] GET /health returns 200 with database ok; 503 when DB down (Step P)
+[x] GET /health returns 200 with database ok; 503 path covered by regression test (Step P1)
 [ ] External uptime monitor alerts on failure (Step P)
 [ ] (Optional pre-launch) Blueprint refactor started only if team capacity allows (Step Q)
 ```

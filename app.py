@@ -1,4 +1,4 @@
-from flask import Flask, Response, abort, flash, g, got_request_exception, redirect, render_template, request, session, url_for
+from flask import Flask, Response, abort, flash, g, got_request_exception, jsonify, redirect, render_template, request, session, url_for
 from flask_wtf.csrf import CSRFProtect, CSRFError
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -875,6 +875,15 @@ def set_password_command(email, password):
 @app.route("/")
 def home():
     return redirect(url_for("login"))
+
+@app.route("/health")
+def health():
+    try:
+        get_db().execute("SELECT 1").fetchone()
+    except Exception:
+        return jsonify({"status": "error", "database": "error"}), 503
+
+    return jsonify({"status": "ok", "database": "ok"})
 
 @app.route("/login", methods=["GET", "POST"])
 @limiter.limit(RATELIMIT_LOGIN, methods=["POST"])
