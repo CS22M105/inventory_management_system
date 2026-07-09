@@ -117,6 +117,53 @@ Run the app:
 flask --app app run --debug
 ```
 
+## Running Tests
+
+The automated tests require a running PostgreSQL server and a database user with
+permission to create and drop test databases. The test suite creates throwaway
+databases, runs the schema/migrations, and drops them after the run.
+
+Run the full suite:
+
+```bash
+pytest -q
+```
+
+By default, tests use:
+
+```text
+postgresql://localhost/inventory_test
+```
+
+To use a different local PostgreSQL server or user, set `TEST_DATABASE_URL`:
+
+```bash
+TEST_DATABASE_URL="postgresql://username:password@localhost:5432/inventory_test" pytest -q
+```
+
+Migration tests also use a separate database URL. Override it only when needed:
+
+```bash
+MIG_DATABASE_URL="postgresql://username:password@localhost:5432/inventory_mig_test" pytest -q
+```
+
+Test modules:
+
+| File | Coverage |
+| --- | --- |
+| `tests/test_auth.py` | Login, invite/set-password, reset-password, protected routes, role access, sudo-mode, lockout, and rate limiting. |
+| `tests/test_stock.py` | Stock add/remove through `/scan` and `/items/<barcode>/stock`, transaction context fields, unknown barcodes, and over-removal protection. |
+| `tests/test_permissions.py` | Route-level student/faculty/administrator permissions for items, admin users, DB status, reports, QR, and protected admin accounts. |
+| `tests/test_exports.py` | Transaction and inventory CSV exports, filters, unauthenticated redirects, and non-paginated export behavior. |
+| `tests/test_migrations.py` | Alembic upgrade from empty DB, downgrade/upgrade round trip, and single migration head. |
+| `tests/test_item_form.py` | Item add/edit date handling, optional expiration dates, item detail, labels, and removal of the old `00/00/0000` sentinel. |
+| `tests/test_transactions_pagination.py` | Transaction pagination, filters, CSV export staying unpaginated, index usage, and page-load performance. |
+
+GitHub Actions runs the same test contract automatically on every push and pull
+request using `.github/workflows/ci.yml`. That workflow starts PostgreSQL,
+installs `requirements.txt`, runs `pytest -q`, and performs an explicit Alembic
+`upgrade head` / `downgrade base` check on a scratch database.
+
 ## Production Configuration
 
 Use `.env.example` as the redacted template for local setup and for configuring
