@@ -1299,3 +1299,81 @@ Where: `templates/rate_limited.html`
 ### Current Result
 
 Login and other sensitive endpoints are now protected against brute-force and scraping through a per-email lockout and per-IP rate limiting, both configurable via environment variables. Users are warned on their final attempt before lockout, and both protections return a clear "too many attempts" message. The main limitation to keep in mind is that the in-memory counters are per-process; production deployments with multiple workers should use the Redis-backed rate limiter so the limits are shared.
+
+---
+
+## Update: July 8, 2026 — Data, Migrations & Reliability (Phase 2, Steps F–H)
+
+This update records the second deployment phase, described in `DATA_MIGRATIONS_RELIABILITY_PLAN.md`. It makes the data layer production-grade: schema changes stop running on every request, the transaction history stays fast as it grows, and dates are stored as real dates. Three of the four planned improvements are complete (Steps F, G, H); the fourth — automated backups + point-in-time recovery (Step I) — is a deploy-time task and is intentionally left for the hosting step. The whole phase is covered by an automated test suite that now stands at **54 passing tests**.
+
+### 1. Step F — Real migrations with Alembic (replacing per-request `ALTER TABLE`)
+
+What was changed:
+
+- Adopted **Alembic** (raw-SQL migration mode, no SQLAlchemy models) as the single source of truth for schema changes.
+- Removed the old `ensure_transaction_columns()`, `ensure_auth_columns()`, and `ensure_barcode_sequence()` "runtime migration" helpers and every call to them from the request/view paths.
+- Wired migrations into deploy: `alembic upgrade head` runs once per release (already in the `Procfile` release phase), with a `flask db-upgrade` / `flask db-downgrade` CLI wrapper for operators.
+
+Why it was needed:
+
+- The `ensure_*` helpers ran `ALTER TABLE` / `CREATE INDEX` / `UPDATE` on ordinary page loads (dashboard, scan, transactions, login, admin). That is fragile (a failed DDL could break a normal page), slow (extra DDL on the hot path), and racy under real concurrent traffic.
+- Production schema management needs to be explicit, versioned, and run once per deploy — not on every request.
+
+How it was done (substeps F1–F5):
+
+- **F1** — Added `alembic` to `requirements.txt`, scaffolded `alembic.ini` + `migrations/`, and configured `migrations/env.py` to read `DATABASE_URL` from the environment (no secrets in `alembic.ini`).
+- **F2** — Authored `0001_baseline` capturing the exact current schema (users/items/transactions, the `item_barcode_number_seq` sequence, all columns the `ensure_*` helpers used to guarantee); existing databases adopt it with `alembic stamp 0001_baseline`.
+- **F3** — Confirmed the baseline covered everything, then deleted the `ensure_*` functions and all their call sites from `app.py` and the test setup.
+- **F4** — Documented `alembic upgrade head` as the production schema command, added the `flask db-upgrade`/`db-downgrade` wrappers, and clarified that `flask init-db` is local-dev bootstrap only.
+- **F5** — Added `tests/test_migrations.py`: a from-zero `upgrade head` schema check, an upgrade→downgrade→upgrade round-trip, and a single-head check.
+
+### 2. Step G — `expiration_date` stored as a real `DATE`
+
+What was changed:
+
+- Converted `items.expiration_date` from free-text `TEXT DEFAULT '00/00/0000'` to a real, nullable `DATE`.
+- The add/edit forms now use `<input type="date">`; an unset date is stored as SQL `NULL` (shown as "Not set"), and the `00/00/0000` sentinel is gone from the UI and database.
+
+Why it was needed:
+
+- Free-text dates cannot be reliably sorted, filtered, or used for "expiring soon" logic, and the `00/00/0000` sentinel leaked into templates.
+
+How it was done (substeps G1–G3):
+
+- **G1** — Migration `0003_expiration_date_to_date`: adds a `DATE` column, backfills it in Python by parsing the old text (empty / `00/00/0000` / unparseable → `NULL`; valid dates → the parsed date), then swaps columns. The reverse migration restores the text format. A Python backfill was used deliberately because PostgreSQL's `to_date()` silently produces a bogus date for junk like `00/00/0000` instead of failing.
+- **G2** — Updated `app.py` (`parse_expiration_date`, `get_item_form_data`), the item forms/detail/label templates, and `schema.sql` so the whole app speaks `DATE`/`NULL`.
+- **G3** — Added `tests/test_item_form.py` covering create-with-date, create-without-date (NULL / "Not set"), unparseable → NULL, edit persistence, and a sentinel-never-appears check.
+
+### 3. Step H — Indexes + server-side pagination on transactions
+
+What was changed:
+
+- Added indexes supporting the transaction history query and filters, and added server-side pagination to the `/transactions` page.
+
+Why it was needed:
+
+- `/transactions` loaded the entire (filtered) table into one page and sorted it with no supporting index, so performance degraded as history grew.
+
+How it was done (substeps H1–H3):
+
+- **H1** — Migration `0004_transaction_indexes` adds `transactions(item_id)`, `transactions(user_id)`, `transactions(transaction_date)`, a composite `(transaction_date DESC, transaction_time DESC, id DESC)` matching the list `ORDER BY`, and `items(name)`. The `CREATE INDEX CONCURRENTLY` caveat (cannot run inside a transaction block) is documented for large-table production use.
+- **H2** — Added `LIMIT`/`OFFSET` pagination (page size configurable via `TRANSACTIONS_PAGE_SIZE`, default 50) with page controls that preserve the active filters; the CSV export stays **unpaginated** (full filtered set).
+- **H3** — Added `tests/test_transactions_pagination.py`: seeds 5,000 transactions and verifies the page-count math at the edges (first/last/out-of-range/empty), that filters combine with paging, that the paginated query uses the composite index (via `EXPLAIN`, no seq-scan + sort), and that a page load stays fast. Also synced the `schema.sql` dev bootstrap with the `0004` indexes so it matches the migrated head.
+
+### 4. What Is Still Left Before Deployment
+
+- **Step I — Automated DB backups + point-in-time recovery** is intentionally deferred to the hosting step (`DEPLOYMENT_INFRASTRUCTURE_PLAN.md`, Step J1). It is provisioned on managed PostgreSQL rather than in application code, and requires a tested restore drill before launch.
+- Migrations must be run at deploy time (`alembic upgrade head` in the release phase); `flask init-db` must not be used against a database under Alembic control.
+- With more than one Gunicorn worker, Flask-Limiter should be backed by a shared store (Redis), as noted in the earlier security update.
+
+### 5. Verification Performed
+
+- Ran `python -m py_compile app.py`; compiled with no errors, and no linter errors were reported on the changed files.
+- Ran the full automated suite (`python -m pytest`): **54 passed** (auth, migrations, item form, and transaction pagination).
+- Migration integrity: from an empty database, `alembic upgrade head` builds the full schema (0001 → 0004); `upgrade → downgrade → upgrade` round-trips cleanly; the migration graph has a single head.
+- Data conversion (Step G) checked on a scratch database with mixed inputs: `00/00/0000`, empty, and unparseable values became `NULL`; real dates (including a leap day) converted correctly; no rows were lost; the column type afterwards is `date`.
+- Index usage (Step H) confirmed with `EXPLAIN (ANALYZE)` on 100,000 seeded rows: the paginated ordered query uses the composite index with no explicit sort, and the item/user/date filters use their matching indexes.
+
+### Current Result
+
+The data layer is now production-grade: schema is managed entirely by Alembic migrations run once per deploy (never per request), `expiration_date` is a real `DATE`, and the transaction history is indexed and paginated so it stays fast as it grows — all covered by a 54-test automated suite. The only remaining Phase 2 item, automated backups + point-in-time recovery, is a deploy-time task handled during hosting setup. All existing login, item, QR, scan, transaction, admin, and export behavior is unchanged.
