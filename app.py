@@ -2,6 +2,7 @@ from flask import Flask, Response, abort, flash, g, redirect, render_template, r
 from flask_wtf.csrf import CSRFProtect, CSRFError
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import generate_password_hash, check_password_hash
 from itsdangerous import URLSafeTimedSerializer, BadData
 import csv
@@ -19,6 +20,15 @@ from pathlib import Path
 
 # holds the parent path to the current script we are running.
 BASE_DIR = Path(__file__).resolve().parent
+
+
+def env_flag(name, default=False):
+    raw_value = os.environ.get(name)
+    if raw_value is None:
+        return default
+    return raw_value.lower() in {"1", "true", "yes", "on"}
+
+
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://localhost/inventory_management_system")
 ELEVATED_ROLES = {"administrator", "faculty"}
 SCHEMA = BASE_DIR / "schema.sql"
@@ -74,6 +84,15 @@ RATELIMIT_LOGIN = os.environ.get("RATELIMIT_LOGIN", "10 per minute")
 RATELIMIT_PASSWORD = os.environ.get("RATELIMIT_PASSWORD", "5 per minute")
 # Stock endpoints: abuse/scraping protection (higher, still bounded).
 RATELIMIT_STOCK = os.environ.get("RATELIMIT_STOCK", "60 per minute")
+# Deployment hardening for TLS-terminating proxies. In production, the app
+# trusts one upstream proxy's X-Forwarded-* headers so generated URLs and
+# request.is_secure reflect the public HTTPS request instead of the internal
+# plain HTTP hop from proxy -> app.
+PROXY_FIX_ENABLED = env_flag("PROXY_FIX_ENABLED", APP_ENV == "production")
+HSTS_ENABLED = env_flag("HSTS_ENABLED", APP_ENV == "production")
+HSTS_MAX_AGE = int(os.environ.get("HSTS_MAX_AGE", "31536000"))
+HSTS_INCLUDE_SUBDOMAINS = env_flag("HSTS_INCLUDE_SUBDOMAINS", False)
+HSTS_PRELOAD = env_flag("HSTS_PRELOAD", False)
 
 
 def validate_production_config():
@@ -96,6 +115,16 @@ def validate_production_config():
 validate_production_config()
 
 app = Flask(__name__)
+if PROXY_FIX_ENABLED:
+    app.wsgi_app = ProxyFix(
+        app.wsgi_app,
+        x_for=1,
+        x_proto=1,
+        x_host=1,
+        x_port=1,
+        x_prefix=1,
+    )
+
 app.config["SECRET_KEY"] = SECRET_KEY or DEV_SECRET_KEY
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
@@ -125,6 +154,19 @@ limiter = Limiter(
     headers_enabled=True,
 )
 limiter.enabled = RATELIMIT_ENABLED
+
+
+@app.after_request
+def add_security_headers(response):
+    if HSTS_ENABLED and request.is_secure:
+        hsts_value = f"max-age={HSTS_MAX_AGE}"
+        if HSTS_INCLUDE_SUBDOMAINS:
+            hsts_value += "; includeSubDomains"
+        if HSTS_PRELOAD:
+            hsts_value += "; preload"
+        response.headers.setdefault("Strict-Transport-Security", hsts_value)
+
+    return response
 
 
 @app.errorhandler(CSRFError)
@@ -540,6 +582,9 @@ def check_config_command():
     add("SESSION_COOKIE_SECURE", app.config["SESSION_COOKIE_SECURE"], "enabled" if app.config["SESSION_COOKIE_SECURE"] else "disabled")
     add("SESSION_COOKIE_HTTPONLY", app.config["SESSION_COOKIE_HTTPONLY"], "enabled" if app.config["SESSION_COOKIE_HTTPONLY"] else "disabled")
     add("SESSION_COOKIE_SAMESITE", bool(app.config["SESSION_COOKIE_SAMESITE"]), "set" if app.config["SESSION_COOKIE_SAMESITE"] else "missing")
+    add("PROXY_FIX_ENABLED", PROXY_FIX_ENABLED, "enabled" if PROXY_FIX_ENABLED else "disabled")
+    add("HSTS_ENABLED", HSTS_ENABLED, "enabled" if HSTS_ENABLED else "disabled")
+    add("HSTS_MAX_AGE", HSTS_MAX_AGE > 0, str(HSTS_MAX_AGE))
     add("RATELIMIT_ENABLED", RATELIMIT_ENABLED, "enabled" if RATELIMIT_ENABLED else "disabled")
     add(
         "RATELIMIT_STORAGE_URI",

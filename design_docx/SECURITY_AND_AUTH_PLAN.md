@@ -424,9 +424,11 @@ workers or multiple hosts, back Flask-Limiter with Redis so limits are shared.
 
 ---
 
-## Step E — Enforce HTTPS/TLS + HSTS (at deploy time)
+## Step E — Enforce HTTPS/TLS + HSTS (at deploy time) — DONE in app, provider verification pending
 
-Effort: S. This is a deployment/config step, not application logic.
+Effort: S. This is primarily a deployment/config step. The app-side support is
+implemented; the live DNS/TLS redirect checks must still be completed in the
+chosen hosting provider.
 
 Files:
 
@@ -453,6 +455,22 @@ http:// requests redirect to https://
 HSTS header is present on responses
 Session cookies are marked Secure
 The dev fallback SECRET_KEY is not in use (app refuses to start without one in prod)
+```
+
+Implementation status:
+
+```text
+DONE in app:
+    - ProxyFix is wired for production deployments behind one trusted proxy.
+    - HSTS is sent on HTTPS responses when HSTS_ENABLED is true.
+    - SESSION_COOKIE_SECURE is true when APP_ENV=production.
+    - Production SECRET_KEY guard rejects missing/dev-fallback/short keys.
+
+Provider verification still required:
+    - DNS points the custom domain at the host.
+    - Managed TLS certificate is issued and valid.
+    - HTTP redirects to HTTPS at the platform/proxy.
+    - Browser shows secure connection on the final custom domain.
 ```
 
 ---
@@ -1188,3 +1206,65 @@ py_compile clean; no linter errors.
   if abuse is observed; the pattern is a one-line @limiter.limit decorator.
 ```
 
+---
+
+## Implementation Log — Step E (HTTPS/TLS + HSTS app support) — 2026-07-09
+
+### What was built
+
+Application support for custom-domain HTTPS deployments is complete. The app now
+trusts one TLS-terminating proxy in production and sends HSTS on HTTPS responses.
+
+### How it works
+
+- **ProxyFix:** When `PROXY_FIX_ENABLED=true` (default in production), the Flask
+  WSGI app is wrapped with Werkzeug `ProxyFix` using one trusted upstream proxy.
+  This lets Flask honor `X-Forwarded-Proto`, `X-Forwarded-Host`,
+  `X-Forwarded-Port`, and related headers from the platform/reverse proxy.
+- **HSTS:** When `HSTS_ENABLED=true` (default in production), HTTPS responses get
+  `Strict-Transport-Security: max-age=31536000` by default. Optional
+  `HSTS_INCLUDE_SUBDOMAINS` and `HSTS_PRELOAD` flags add those directives only
+  when the domain is ready.
+- **Secure cookies:** `SESSION_COOKIE_SECURE` remains tied to
+  `APP_ENV=production`.
+- **Public URLs:** Operators must set `APP_BASE_URL=https://<domain>` so invite,
+  reset, and QR-code links use the final HTTPS domain.
+
+### Modifications by file
+
+```text
+app.py
+    - Imported werkzeug.middleware.proxy_fix.ProxyFix.
+    - Added env_flag().
+    - Added PROXY_FIX_ENABLED, HSTS_ENABLED, HSTS_MAX_AGE,
+      HSTS_INCLUDE_SUBDOMAINS, HSTS_PRELOAD.
+    - Wrapped app.wsgi_app with ProxyFix when enabled.
+    - Added after_request hook for Strict-Transport-Security on HTTPS requests.
+    - Extended check-config with ProxyFix and HSTS status.
+
+.env.example
+    - Documented PROXY_FIX_ENABLED and HSTS_* settings.
+
+README.md
+    - Documented the new proxy/HSTS production configuration values.
+```
+
+### Verification performed locally
+
+```text
+[x] Production app with X-Forwarded-Proto=https emits Strict-Transport-Security.
+[x] Production session cookies remain Secure, HTTPOnly, SameSite=Lax.
+[x] check-config reports PROXY_FIX_ENABLED and HSTS_ENABLED.
+[x] py_compile passed.
+```
+
+### Provider verification still required
+
+```text
+[ ] DNS points the custom domain at the host.
+[ ] Managed TLS certificate is issued and valid.
+[ ] http://<domain> redirects to https://<domain>.
+[ ] Browser shows a secure connection.
+[ ] Final domain responses carry Strict-Transport-Security.
+[ ] QR codes encode https://<domain>/items/<barcode>/stock URLs.
+```

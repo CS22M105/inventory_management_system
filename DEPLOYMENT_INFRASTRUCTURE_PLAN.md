@@ -833,3 +833,60 @@ Verification performed locally:
 [x] gunicorn.conf.py compiles.
 [x] Gunicorn config check succeeds.
 ```
+
+### July 9, 2026 — Substep J3: Custom domain + TLS + HSTS
+
+Status: App-side proxy/HSTS support completed. DNS records, managed certificate
+issuance, HTTP->HTTPS redirect, and final browser/certificate verification remain
+provider actions.
+
+What changed:
+
+```text
+1. Added Werkzeug ProxyFix support in app.py.
+      - Enabled by PROXY_FIX_ENABLED.
+      - Defaults to enabled when APP_ENV=production.
+      - Trusts one upstream TLS-terminating proxy's X-Forwarded-* headers.
+2. Added HSTS response support in app.py.
+      - Enabled by HSTS_ENABLED.
+      - Defaults to enabled when APP_ENV=production.
+      - Sends Strict-Transport-Security on HTTPS responses.
+      - HSTS_MAX_AGE defaults to 31536000 seconds.
+      - HSTS_INCLUDE_SUBDOMAINS and HSTS_PRELOAD are optional flags.
+3. Extended flask check-config to report ProxyFix and HSTS status.
+4. Documented PROXY_FIX_ENABLED and HSTS_* values in README.md and .env.example.
+5. Updated design_docx/SECURITY_AND_AUTH_PLAN.md Step E to show app-side HTTPS
+   and HSTS support as done, with provider verification still required.
+```
+
+Provider/operator checklist:
+
+```text
+[ ] Create DNS CNAME/A record per provider instructions.
+[ ] Issue/verify platform-managed TLS certificate.
+[ ] Enable HTTP -> HTTPS redirect at the platform/proxy.
+[ ] Set APP_BASE_URL=https://<custom-domain>.
+[ ] Keep APP_ENV=production.
+[ ] Keep PROXY_FIX_ENABLED=true behind the platform/proxy.
+[ ] Keep HSTS_ENABLED=true only after HTTPS is confirmed working.
+```
+
+Verification performed locally:
+
+```text
+[x] ProxyFix honors X-Forwarded-Proto=https.
+[x] HTTPS responses carry Strict-Transport-Security when HSTS is enabled.
+[x] Session cookies are Secure in APP_ENV=production.
+[x] check-config reports ProxyFix and HSTS status.
+[x] py_compile passed.
+```
+
+Verification pending on deployed domain:
+
+```text
+[ ] http://<domain> redirects to https://<domain>.
+[ ] Browser certificate is valid and trusted.
+[ ] Response carries Strict-Transport-Security.
+[ ] Session cookies are marked Secure on the real domain.
+[ ] QR code PNG/content points to https://<domain>/items/<barcode>/stock.
+```

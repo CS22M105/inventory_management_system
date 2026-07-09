@@ -165,6 +165,11 @@ Optional environment variables:
 | `RATELIMIT_PASSWORD` | No | Rate limit for forgot-password, set-password, and reset-password POST requests. |
 | `RATELIMIT_STOCK` | No | Rate limit for stock add/remove endpoints. |
 | `TRANSACTIONS_PAGE_SIZE` | No | Number of transaction rows shown per history page. |
+| `PROXY_FIX_ENABLED` | No | Enables trusting one upstream proxy's `X-Forwarded-*` headers; keep enabled behind a TLS-terminating platform/proxy. |
+| `HSTS_ENABLED` | No | Sends the `Strict-Transport-Security` header on HTTPS responses. Enable only after HTTPS is confirmed working. |
+| `HSTS_MAX_AGE` | No | HSTS max-age in seconds. Default is `31536000` (one year). |
+| `HSTS_INCLUDE_SUBDOMAINS` | No | Adds `includeSubDomains` to HSTS when every subdomain is HTTPS-ready. |
+| `HSTS_PRELOAD` | No | Adds `preload` to HSTS only if the domain is intentionally prepared for browser preload lists. |
 
 Important production notes:
 
@@ -176,6 +181,11 @@ Important production notes:
   pending invite/password-reset links because those tokens are signed with it.
 - In production, the app refuses to start when `SECRET_KEY` is missing, equal to
   the development fallback, or shorter than 64 characters.
+- Behind a TLS-terminating proxy/platform, keep `PROXY_FIX_ENABLED=true` so the
+  app honors `X-Forwarded-Proto` and `X-Forwarded-Host` for secure request state
+  and correct public URLs.
+- Enable `HSTS_ENABLED=true` only after the custom domain has a valid HTTPS
+  certificate and HTTP redirects to HTTPS.
 - Operators can run `flask --app app check-config` to print required config
   names/status without printing secret values.
 
