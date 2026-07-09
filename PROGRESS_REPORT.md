@@ -1377,3 +1377,171 @@ How it was done (substeps H1–H3):
 ### Current Result
 
 The data layer is now production-grade: schema is managed entirely by Alembic migrations run once per deploy (never per request), `expiration_date` is a real `DATE`, and the transaction history is indexed and paginated so it stays fast as it grows — all covered by a 54-test automated suite. The only remaining Phase 2 item, automated backups + point-in-time recovery, is a deploy-time task handled during hosting setup. All existing login, item, QR, scan, transaction, admin, and export behavior is unchanged.
+
+---
+
+## Update: July 9, 2026 — Production Deployment Readiness (Phase 3, Steps J–M)
+
+This update records the production-readiness work completed after the local Flask/PostgreSQL system became stable. The goal of this phase is to make the project safer to deploy on a cloud platform without changing the working inventory workflows. The main focus was production configuration, managed hosting preparation, static-file serving, Gunicorn tuning, CI/CD automation, and GitHub repository protection.
+
+### 1. Production configuration and secrets
+
+What was changed:
+
+- Expanded `.env.example` as a redacted environment template.
+- Confirmed `.env` stays gitignored and real secrets should live only in the platform secret store.
+- Hardened production startup so the app refuses to run when `APP_ENV=production` and:
+  - `SECRET_KEY` is missing.
+  - `SECRET_KEY` equals the development fallback.
+  - `SECRET_KEY` is shorter than 64 characters.
+- Added `flask --app app check-config` so operators can check required configuration names/status without printing secret values.
+- Documented required vs optional production variables in `README.md`.
+- Documented that rotating `SECRET_KEY` invalidates active sessions and pending invite/reset links.
+
+Why it was needed:
+
+- A production system must not depend on hard-coded or weak secrets.
+- Operators need a clear configuration contract before deploying to cloud.
+- Configuration checks should reveal missing settings without leaking secret values.
+
+### 2. Managed database and first production bootstrap planning
+
+What was documented:
+
+- Managed PostgreSQL should be used for production.
+- Automated daily backups and point-in-time recovery must be enabled by the provider.
+- `DATABASE_URL` must use the managed PostgreSQL connection string and should require TLS where supported.
+- Production schema is created by Alembic migrations (`alembic upgrade head`), not by `flask init-db`.
+- First administrator bootstrap should be done without shipping demo passwords:
+  - Create the first admin row in production.
+  - Set the password once with `flask --app app set-password <email> <password>`, or use the invite flow.
+- Added first-production smoke-test checklist in `README.md`.
+
+Why it was needed:
+
+- `flask init-db` is only for local development and includes demo users.
+- Production data should be managed by migrations and protected by provider backups.
+- The first admin setup must avoid default/demo credentials.
+
+### 3. Custom domain, HTTPS, ProxyFix, and HSTS support
+
+What was changed:
+
+- Added `ProxyFix` support so Flask can correctly understand `X-Forwarded-Proto` and `X-Forwarded-Host` behind a TLS-terminating platform proxy.
+- Added HSTS response support when production HTTPS is enabled.
+- Added environment controls:
+  - `PROXY_FIX_ENABLED`
+  - `HSTS_ENABLED`
+  - `HSTS_MAX_AGE`
+  - `HSTS_INCLUDE_SUBDOMAINS`
+  - `HSTS_PRELOAD`
+- Updated `SECURITY_AND_AUTH_PLAN.md` to mark the app-side HTTPS/HSTS support as complete, with final DNS/TLS verification still left for the hosting provider.
+
+Why it was needed:
+
+- In production, the browser connects over HTTPS but the app may receive internal HTTP traffic from the platform proxy.
+- Flask must know the real public scheme/host so secure cookies, links, QR URLs, and redirects behave correctly.
+- HSTS improves browser-side HTTPS enforcement after the domain is confirmed working.
+
+### 4. WhiteNoise static assets and Gunicorn tuning
+
+What was changed:
+
+- Added `whitenoise` to `requirements.txt`.
+- Wrapped the WSGI app with WhiteNoise to serve `/static/...` files with long cache headers.
+- Generated gzip-compressed CSS files:
+  - `static/css/login.css.gz`
+  - `static/css/styles.css.gz`
+- Kept templates and `url_for('static', ...)` paths unchanged.
+- Tuned `gunicorn.conf.py`:
+  - Binds to `$PORT`.
+  - Uses `WEB_CONCURRENCY` for worker count.
+  - Keeps `GUNICORN_WORKERS` as a backward-compatible alias.
+  - Uses configurable threads, timeout, graceful timeout, keepalive, logs, and worker recycling.
+- Updated `.env.example` and `README.md` with the Gunicorn runtime variables.
+
+Why it was needed:
+
+- Static assets should not waste normal Flask route handling.
+- Long cache headers and gzip compression make CSS/image delivery faster and CDN-ready.
+- Gunicorn needs production-sane defaults so multiple users can be served concurrently.
+- Worker recycling is a normal safety measure for long-running Python web services.
+
+### 5. CI/CD workflows
+
+What was added:
+
+- Added `.github/workflows/ci.yml`.
+- CI runs on `push` and `pull_request`.
+- CI starts a PostgreSQL 16 service container.
+- CI installs `requirements.txt`.
+- CI runs the full test suite with `pytest -q`.
+- CI runs an explicit migration check on a scratch database:
+  - `alembic upgrade head`
+  - `alembic downgrade base`
+- Added `.github/workflows/deploy.yml`.
+- Deploy workflow runs only after CI succeeds on a push to `master` or `main`.
+- Deploy workflow uses the GitHub `production` environment.
+- Deploy workflow calls a provider deploy hook stored as `DEPLOY_HOOK_URL` in GitHub Secrets.
+- Deployment rollback instructions were added to `README.md`.
+
+Why it was needed:
+
+- Every push/PR should prove the app and migrations still work against real PostgreSQL.
+- Deployment should only happen after CI is green.
+- Deploy tokens and provider URLs must stay in GitHub Secrets, not in workflow YAML.
+- Rollback steps must be clear before production launch.
+
+### 6. GitHub branch protection and production secrets
+
+What was documented:
+
+- Protect the current default branch `master` (or `main` later if renamed).
+- Require the CI status check before merging.
+- Require branches to be up to date before merging.
+- Optionally require pull-request review.
+- Disable force pushes and protected-branch deletion.
+- Store `DEPLOY_HOOK_URL` in GitHub Actions secrets or the `production` environment.
+- Use a protected `production` environment with required reviewers if deployment approval is needed.
+
+Why it was needed:
+
+- Branch protection prevents untested changes from reaching production.
+- Required CI checks make the 54-test suite and migration checks part of the merge gate.
+- GitHub environments provide a safe place to control production deploy approvals and secrets.
+
+### 7. Verification performed
+
+- `python -m py_compile app.py` passed after production config/static changes.
+- Static assets returned HTTP 200 through WhiteNoise.
+- CSS returned long cache headers: `Cache-Control: max-age=31536000, public`.
+- CSS returned gzip content when requested with `Accept-Encoding: gzip`.
+- Production HSTS behavior was verified through test-client checks.
+- Gunicorn config check confirmed:
+  - `$PORT` binding.
+  - `WEB_CONCURRENCY`.
+  - `GUNICORN_THREADS`.
+  - `GUNICORN_TIMEOUT`.
+  - Worker recycling settings.
+- Temporary Gunicorn smoke test served parallel `/login` and `/static/css/styles.css` requests successfully.
+- Local migration scratch check passed:
+  - `alembic upgrade head`
+  - `alembic downgrade base`
+- Full local automated suite passed: **54 passed**.
+- Workflow YAML files parse correctly.
+- Workflow files reference secrets by name only; no production secret values were committed.
+
+### 8. Remaining production/operator tasks
+
+- Choose and configure the hosting provider.
+- Provision managed PostgreSQL with backups and point-in-time recovery.
+- Store production variables in the platform secret store.
+- Configure `DEPLOY_HOOK_URL` in GitHub Actions Secrets or the `production` environment.
+- Configure branch protection in GitHub Settings.
+- Configure custom domain, TLS certificate, HTTP-to-HTTPS redirect, and final HSTS verification.
+- Run the first production bootstrap and smoke test on the live domain.
+- For more than one Gunicorn worker/host, set `RATELIMIT_STORAGE_URI` to Redis or another shared store.
+
+### Current Result
+
+The project is now much closer to cloud deployment. The app still runs locally as before, but it now has production configuration guards, environment documentation, app-side HTTPS/proxy support, WhiteNoise static serving, tuned Gunicorn settings, CI tests with PostgreSQL, a deploy workflow gated by CI, and clear GitHub protection/secrets instructions. The remaining work is mostly provider setup and live-domain verification rather than core application code.
