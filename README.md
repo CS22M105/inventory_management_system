@@ -212,6 +212,8 @@ Optional environment variables:
 | `RATELIMIT_PASSWORD` | No | Rate limit for forgot-password, set-password, and reset-password POST requests. |
 | `RATELIMIT_STOCK` | No | Rate limit for stock add/remove endpoints. |
 | `TRANSACTIONS_PAGE_SIZE` | No | Number of transaction rows shown per history page. |
+| `SENTRY_DSN` | Yes | Optional Sentry project DSN for production/staging error monitoring. Leave blank locally. |
+| `SENTRY_TRACES_SAMPLE_RATE` | No | Optional Sentry tracing sample rate from `0.0` to `1.0`; default is `0.1` in production and `0.0` in development. |
 | `WEB_CONCURRENCY` | No | Number of Gunicorn worker processes. If unset, defaults to `(2 * CPU count) + 1`; `GUNICORN_WORKERS` is still accepted as a compatibility alias. |
 | `GUNICORN_THREADS` | No | Threads per Gunicorn worker. Default is `2` for this I/O-bound Flask app. |
 | `GUNICORN_TIMEOUT` | No | Worker request timeout in seconds. Default is `30`. |
@@ -245,6 +247,8 @@ Important production notes:
   certificate and HTTP redirects to HTTPS.
 - Operators can run `flask --app app check-config` to print required config
   names/status without printing secret values.
+- `SENTRY_DSN` is optional. When blank, Sentry is not initialized and local
+  development makes no Sentry network calls.
 
 The app includes a `Procfile` for platforms that support it:
 
@@ -369,6 +373,87 @@ For deployment secrets:
 
 Never commit provider deploy tokens, SMTP passwords, database URLs, or production
 `SECRET_KEY` values to workflow YAML, README, `.env.example`, or app code.
+
+## Observability
+
+The app has two production observability paths:
+
+- **Sentry** for unhandled exceptions and stack traces.
+- **Structured request logs** written to stdout for the hosting platform log
+  stream.
+
+### Sentry setup
+
+Sentry is disabled unless `SENTRY_DSN` is set.
+
+To enable it on staging or production:
+
+1. Create or open a Sentry account.
+2. Create a new Sentry project for this Flask app.
+3. Choose **Python / Flask** as the platform when Sentry asks for the framework.
+4. Copy the project DSN from Sentry.
+5. In the hosting platform's environment/secret settings, set:
+
+```text
+SENTRY_DSN=<your Sentry DSN>
+SENTRY_TRACES_SAMPLE_RATE=0.1
+```
+
+6. Redeploy or restart the app so the new environment variables are loaded.
+7. Run `flask --app app check-config` on the host if the platform supports shell
+   commands; it should show `SENTRY_DSN: OK (set)`.
+8. Trigger one harmless test exception on a staging deploy, then confirm the
+   event appears in the Sentry dashboard with the correct environment.
+
+Do not commit the DSN to git. Store it only in the hosting platform secret store
+or GitHub Environment/Actions secrets if deployment tooling needs it.
+
+Sentry is configured with `send_default_pii=False`, so user emails and other
+personally identifying request data are not sent by default. Revisit that choice
+explicitly before enabling any PII collection later.
+
+### Structured request logs
+
+In local development, request logs are readable text. In production
+(`APP_ENV=production`), the app emits one JSON log line per Flask request.
+
+Each request completion log includes:
+
+- `request_id`
+- `method`
+- `path`
+- `status`
+- `duration_ms`
+- `remote_addr`
+
+The response also includes `X-Request-ID`, which helps connect browser reports,
+platform logs, and Sentry events.
+
+4xx responses log as `WARNING`. Unhandled exceptions log an `ERROR` line with
+the same request context, and Sentry receives the exception when `SENTRY_DSN` is
+configured.
+
+To read logs:
+
+- **Render:** open the service in the Render dashboard and use the **Logs** tab
+  for live log tailing. Filter/search for `request_id`, `"level":"ERROR"`, or
+  a specific path.
+- **Railway:** open the service in the Railway dashboard and use the service
+  logs/log stream. If using the Railway CLI, tail the service logs from the
+  project linked to this app.
+- **Any Procfile platform:** read stdout/stderr logs from the platform log
+  viewer. Gunicorn access/error logs and app request logs are both written to
+  stdout/stderr.
+
+The app intentionally does **not** log:
+
+- Passwords.
+- Session cookies.
+- CSRF tokens.
+- Invite/reset token values.
+- Request bodies or submitted form data.
+- Full database connection strings.
+- SMTP passwords or provider tokens.
 
 ## Database migrations
 
