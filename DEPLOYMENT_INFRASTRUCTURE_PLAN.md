@@ -568,7 +568,7 @@ Data safety:
 [ ] ProxyFix in place so the app sees correct scheme/host behind the proxy
 [ ] APP_BASE_URL=https://<domain>; QR codes encode https:// URLs
 [x] Static assets served by WhiteNoise with cache headers
-[ ] Gunicorn tuned (workers/threads/timeout) and binding to $PORT
+[x] Gunicorn tuned (workers/threads/timeout) and binding to $PORT
 [ ] Flask-Limiter backed by a shared store (Redis) if running >1 worker/host
 [ ] CI runs the full pytest suite + migration up/down check on every PR
 [ ] Deploys happen only on green main; migrations run once per release
@@ -1009,4 +1009,66 @@ Verification performed locally:
     enabled.
 [x] /login still renders HTTP 200.
 [x] Existing pytest suite passes: 54 passed.
+```
+
+### July 9, 2026 — Substep L2: Tune Gunicorn
+
+Status: Completed in `gunicorn.conf.py`, `.env.example`, and `README.md`.
+Live concurrency/latency verification on the final hosting platform remains an
+operator check, because real worker behavior depends on the deployed CPU/RAM
+size and platform router.
+
+What changed:
+
+```text
+1. Tuned gunicorn.conf.py around the Procfile web command:
+      web: gunicorn app:app -c gunicorn.conf.py
+2. Gunicorn now binds to the platform-provided PORT:
+      bind = 0.0.0.0:$PORT
+3. Worker count now uses the common platform variable WEB_CONCURRENCY.
+      - If WEB_CONCURRENCY is unset, default is (2 * CPU count) + 1.
+      - GUNICORN_WORKERS remains supported as a backward-compatible alias.
+4. Threads remain environment-configurable with GUNICORN_THREADS and default to
+   2 for this I/O-bound Flask/PostgreSQL app.
+5. Request timeout now defaults to 30 seconds through GUNICORN_TIMEOUT.
+6. Graceful timeout, keepalive, access log, error log, and log level remain
+   environment-configurable.
+7. Added worker recycling:
+      GUNICORN_MAX_REQUESTS=1000
+      GUNICORN_MAX_REQUESTS_JITTER=100
+   This avoids keeping any one worker alive forever.
+8. Added the Gunicorn tunables to .env.example.
+9. Added the Gunicorn tunables to the README Production Configuration table.
+```
+
+Why:
+
+```text
+Multiple workers/threads let the deployed app serve several users at once
+instead of behaving like a single local development process. Recycling workers
+periodically is a normal production hardening step for long-running Python web
+apps. Logging to stdout/stderr lets the cloud platform collect logs correctly.
+```
+
+Important production note:
+
+```text
+When WEB_CONCURRENCY or GUNICORN_WORKERS is greater than 1, Flask-Limiter's
+memory:// store is per worker. For correct shared rate limits in production,
+set RATELIMIT_STORAGE_URI to Redis or another shared backend.
+```
+
+Verification performed locally:
+
+```text
+[x] gunicorn.conf.py compiles.
+[x] Gunicorn config check loads the tuned config.
+[x] Gunicorn binds to the provided PORT.
+[x] WEB_CONCURRENCY overrides worker count.
+[x] GUNICORN_THREADS overrides thread count.
+[x] GUNICORN_TIMEOUT overrides timeout.
+[x] GUNICORN_MAX_REQUESTS and GUNICORN_MAX_REQUESTS_JITTER are present.
+[x] Gunicorn logs to stdout/stderr by default.
+[x] A local Gunicorn smoke test serves parallel /login requests successfully.
+[x] Existing pytest suite passes.
 ```

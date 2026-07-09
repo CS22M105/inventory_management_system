@@ -165,6 +165,16 @@ Optional environment variables:
 | `RATELIMIT_PASSWORD` | No | Rate limit for forgot-password, set-password, and reset-password POST requests. |
 | `RATELIMIT_STOCK` | No | Rate limit for stock add/remove endpoints. |
 | `TRANSACTIONS_PAGE_SIZE` | No | Number of transaction rows shown per history page. |
+| `WEB_CONCURRENCY` | No | Number of Gunicorn worker processes. If unset, defaults to `(2 * CPU count) + 1`; `GUNICORN_WORKERS` is still accepted as a compatibility alias. |
+| `GUNICORN_THREADS` | No | Threads per Gunicorn worker. Default is `2` for this I/O-bound Flask app. |
+| `GUNICORN_TIMEOUT` | No | Worker request timeout in seconds. Default is `30`. |
+| `GUNICORN_GRACEFUL_TIMEOUT` | No | Seconds Gunicorn allows workers to finish during graceful restart/shutdown. |
+| `GUNICORN_KEEPALIVE` | No | Seconds to keep HTTP connections open for reuse. |
+| `GUNICORN_MAX_REQUESTS` | No | Number of requests after which a worker is recycled. Default is `1000`. |
+| `GUNICORN_MAX_REQUESTS_JITTER` | No | Random extra requests added before recycling to avoid all workers restarting together. |
+| `GUNICORN_ACCESSLOG` | No | Gunicorn access-log destination. Default `-` writes to stdout for platform logs. |
+| `GUNICORN_ERRORLOG` | No | Gunicorn error-log destination. Default `-` writes to stderr/stdout platform logs. |
+| `GUNICORN_LOGLEVEL` | No | Gunicorn log level. Default is `info`. |
 | `PROXY_FIX_ENABLED` | No | Enables trusting one upstream proxy's `X-Forwarded-*` headers; keep enabled behind a TLS-terminating platform/proxy. |
 | `HSTS_ENABLED` | No | Sends the `Strict-Transport-Security` header on HTTPS responses. Enable only after HTTPS is confirmed working. |
 | `HSTS_MAX_AGE` | No | HSTS max-age in seconds. Default is `31536000` (one year). |
