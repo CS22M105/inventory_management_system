@@ -12,8 +12,10 @@ import io
 import os
 import psycopg2
 import qrcode
+import sentry_sdk
 import smtplib
 from psycopg2.extras import RealDictCursor
+from sentry_sdk.integrations.flask import FlaskIntegration
 import click
 import time
 from datetime import datetime, timedelta
@@ -28,6 +30,16 @@ def env_flag(name, default=False):
     if raw_value is None:
         return default
     return raw_value.lower() in {"1", "true", "yes", "on"}
+
+
+def env_float(name, default):
+    raw_value = os.environ.get(name)
+    if raw_value is None:
+        return default
+    try:
+        return float(raw_value)
+    except (TypeError, ValueError):
+        return default
 
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://localhost/inventory_management_system")
@@ -94,6 +106,32 @@ HSTS_ENABLED = env_flag("HSTS_ENABLED", APP_ENV == "production")
 HSTS_MAX_AGE = int(os.environ.get("HSTS_MAX_AGE", "31536000"))
 HSTS_INCLUDE_SUBDOMAINS = env_flag("HSTS_INCLUDE_SUBDOMAINS", False)
 HSTS_PRELOAD = env_flag("HSTS_PRELOAD", False)
+# Optional production error monitoring. Blank by default, so local development
+# and tests do not send events or make Sentry network calls.
+SENTRY_DSN = os.environ.get("SENTRY_DSN", "").strip()
+SENTRY_TRACES_SAMPLE_RATE = max(
+    0.0,
+    min(
+        1.0,
+        env_float(
+            "SENTRY_TRACES_SAMPLE_RATE",
+            0.1 if APP_ENV == "production" else 0.0,
+        ),
+    ),
+)
+
+
+def initialize_sentry():
+    if not SENTRY_DSN:
+        return
+
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        integrations=[FlaskIntegration()],
+        environment=APP_ENV,
+        traces_sample_rate=SENTRY_TRACES_SAMPLE_RATE,
+        send_default_pii=False,
+    )
 
 
 def hsts_header_value():
@@ -128,6 +166,7 @@ def validate_production_config():
 
 
 validate_production_config()
+initialize_sentry()
 
 app = Flask(__name__)
 if PROXY_FIX_ENABLED:
@@ -602,6 +641,8 @@ def check_config_command():
     add("PROXY_FIX_ENABLED", PROXY_FIX_ENABLED, "enabled" if PROXY_FIX_ENABLED else "disabled")
     add("HSTS_ENABLED", HSTS_ENABLED, "enabled" if HSTS_ENABLED else "disabled")
     add("HSTS_MAX_AGE", HSTS_MAX_AGE > 0, str(HSTS_MAX_AGE))
+    add("SENTRY_DSN", True, "set" if SENTRY_DSN else "not configured")
+    add("SENTRY_TRACES_SAMPLE_RATE", 0.0 <= SENTRY_TRACES_SAMPLE_RATE <= 1.0, str(SENTRY_TRACES_SAMPLE_RATE))
     add("RATELIMIT_ENABLED", RATELIMIT_ENABLED, "enabled" if RATELIMIT_ENABLED else "disabled")
     add(
         "RATELIMIT_STORAGE_URI",
