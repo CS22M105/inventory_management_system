@@ -706,3 +706,31 @@ Verification performed locally:
 [x] `python -m py_compile app.py` passes.
 [x] Existing pytest suite passes: 54 passed.
 ```
+
+### July 8, 2026 — Substep K3: Document the config contract
+
+Status: Completed in `README.md` and aligned with `.env.example`.
+
+What was done:
+
+```text
+1. Expanded the README Production Configuration section into a required vs
+   optional environment-variable contract.
+2. For each variable, documented whether it is a secret and what it controls.
+3. Documented that DATABASE_URL is shared by the Flask app and Alembic through
+   migrations/env.py, while alembic.ini intentionally stores no real URL.
+4. Documented that rotating SECRET_KEY invalidates all active sessions and all
+   pending invite/reset links because those tokens are signed with SECRET_KEY.
+5. Documented that production refuses missing/dev-fallback/short SECRET_KEY
+   values and that `flask check-config` can self-check names/status without
+   printing secrets.
+```
+
+Verification performed locally:
+
+```text
+[x] README lists required production variables in one place.
+[x] README lists optional tunables in one place.
+[x] README and .env.example both include the same production config categories.
+[x] No real secrets were added to README or .env.example.
+```

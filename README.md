@@ -119,17 +119,65 @@ flask --app app run --debug
 
 ## Production Configuration
 
-Copy the example environment file and set real values on the server or cloud platform:
+Use `.env.example` as the redacted template for local setup and for configuring
+the production platform. Real production values belong in the hosting
+platform's secret/environment store, not in git.
 
 ```bash
 cp .env.example .env
 ```
 
-Required environment variables:
+Generate a production secret key outside git:
 
-- `SECRET_KEY`: long random value used to protect user sessions.
-- `DATABASE_URL`: PostgreSQL connection string.
-- `APP_ENV`: use `production` in deployed environments.
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(64))"
+```
+
+Required production environment variables:
+
+| Variable | Secret? | Description |
+| --- | --- | --- |
+| `APP_ENV` | No | Set to `production` in deployed environments so secure-cookie and production guards are active. |
+| `SECRET_KEY` | Yes | 64+ character random value used to sign sessions, CSRF tokens, invite links, and password-reset links. |
+| `DATABASE_URL` | Yes | Managed PostgreSQL connection string. Shared by the Flask app and Alembic migrations through `migrations/env.py`. |
+| `APP_BASE_URL` | No | Public HTTPS base URL used when generating invite/reset links and QR-code links. |
+| `EMAIL_PROVIDER` | No | Set to `smtp` in production so invite/reset emails are actually sent. |
+| `EMAIL_FROM` | No | Approved sender address for invite/reset emails. |
+| `SMTP_HOST` | No | SMTP provider hostname. |
+| `SMTP_PORT` | No | SMTP provider port, usually `587` for STARTTLS or `465` for SSL. |
+| `SMTP_USERNAME` | Usually yes | SMTP account username; treat as secret unless the provider says otherwise. |
+| `SMTP_PASSWORD` | Yes | SMTP password or app password. |
+| `SMTP_USE_TLS` | No | `true` when the provider uses STARTTLS. |
+| `SMTP_USE_SSL` | No | `true` when the provider requires SMTP over SSL. |
+
+Optional environment variables:
+
+| Variable | Secret? | Description |
+| --- | --- | --- |
+| `BARCODE_PREFIX` | No | Per-customer prefix for generated item codes, for example `KATZ-NURS`. |
+| `SESSION_IDLE_MINUTES` | No | Minutes of inactivity before a signed session expires. |
+| `SUDO_MODE_MAX_AGE` | No | Seconds after login/re-auth that destructive admin actions remain allowed. |
+| `LOGIN_MAX_ATTEMPTS` | No | Consecutive failed-login threshold before temporary lockout. |
+| `LOGIN_LOCKOUT_SECONDS` | No | Lockout duration after too many failed login attempts. |
+| `RATELIMIT_ENABLED` | No | Enables/disables Flask-Limiter route limits. Keep enabled in production. |
+| `RATELIMIT_STORAGE_URI` | Usually yes | Rate-limit backend URI. Use Redis/shared storage for multi-worker or multi-host production; treat URI credentials as secret. |
+| `RATELIMIT_LOGIN` | No | Rate limit for login POST requests. |
+| `RATELIMIT_PASSWORD` | No | Rate limit for forgot-password, set-password, and reset-password POST requests. |
+| `RATELIMIT_STOCK` | No | Rate limit for stock add/remove endpoints. |
+| `TRANSACTIONS_PAGE_SIZE` | No | Number of transaction rows shown per history page. |
+
+Important production notes:
+
+- Do not commit `.env`; it is listed in `.gitignore`.
+- `DATABASE_URL` is used by both the Flask app and Alembic. `migrations/env.py`
+  reads it from the environment at migration time, and `alembic.ini` intentionally
+  does not store a real connection string.
+- Rotating `SECRET_KEY` immediately invalidates all active sessions and all
+  pending invite/password-reset links because those tokens are signed with it.
+- In production, the app refuses to start when `SECRET_KEY` is missing, equal to
+  the development fallback, or shorter than 64 characters.
+- Operators can run `flask --app app check-config` to print required config
+  names/status without printing secret values.
 
 The app includes a `Procfile` for platforms that support it:
 
