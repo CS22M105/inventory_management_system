@@ -24,6 +24,8 @@ ELEVATED_ROLES = {"administrator", "faculty"}
 SCHEMA = BASE_DIR / "schema.sql"
 APP_ENV = os.environ.get("APP_ENV", "development").lower()
 SECRET_KEY = os.environ.get("SECRET_KEY")
+DEV_SECRET_KEY = "dev-secret-key-change-before-production"
+MIN_PRODUCTION_SECRET_KEY_LENGTH = 64
 # Public base URL used when building QR-code links. If unset, the app falls
 # back to the current request host at runtime (see later QR routes).
 APP_BASE_URL = os.environ.get("APP_BASE_URL")
@@ -73,11 +75,28 @@ RATELIMIT_PASSWORD = os.environ.get("RATELIMIT_PASSWORD", "5 per minute")
 # Stock endpoints: abuse/scraping protection (higher, still bounded).
 RATELIMIT_STOCK = os.environ.get("RATELIMIT_STOCK", "60 per minute")
 
-app = Flask(__name__)
-if APP_ENV == "production" and not SECRET_KEY:
-    raise RuntimeError("SECRET_KEY environment variable must be set in production.")
 
-app.config["SECRET_KEY"] = SECRET_KEY or "dev-secret-key-change-before-production"
+def validate_production_config():
+    if APP_ENV != "production":
+        return
+
+    if not SECRET_KEY:
+        raise RuntimeError("SECRET_KEY environment variable must be set in production.")
+
+    if SECRET_KEY == DEV_SECRET_KEY:
+        raise RuntimeError("SECRET_KEY must not use the development fallback in production.")
+
+    if len(SECRET_KEY) < MIN_PRODUCTION_SECRET_KEY_LENGTH:
+        raise RuntimeError(
+            "SECRET_KEY must be at least "
+            f"{MIN_PRODUCTION_SECRET_KEY_LENGTH} characters in production."
+        )
+
+
+validate_production_config()
+
+app = Flask(__name__)
+app.config["SECRET_KEY"] = SECRET_KEY or DEV_SECRET_KEY
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["SESSION_COOKIE_SECURE"] = APP_ENV == "production"
@@ -483,6 +502,65 @@ def _alembic_config():
     from alembic.config import Config as AlembicConfig
 
     return AlembicConfig(str(BASE_DIR / "alembic.ini"))
+
+
+@app.cli.command("check-config")
+def check_config_command():
+    """Print production configuration status without exposing secret values."""
+    checks = []
+
+    def add(name, ok, detail):
+        checks.append((name, ok, detail))
+
+    add("APP_ENV", APP_ENV == "production", "production" if APP_ENV == "production" else "not production")
+    add("SECRET_KEY", bool(SECRET_KEY), "set" if SECRET_KEY else "missing")
+    add(
+        "SECRET_KEY_LENGTH",
+        bool(SECRET_KEY) and len(SECRET_KEY) >= MIN_PRODUCTION_SECRET_KEY_LENGTH,
+        f">= {MIN_PRODUCTION_SECRET_KEY_LENGTH} chars" if SECRET_KEY and len(SECRET_KEY) >= MIN_PRODUCTION_SECRET_KEY_LENGTH else "too short or missing",
+    )
+    add(
+        "SECRET_KEY_NOT_DEV_FALLBACK",
+        SECRET_KEY != DEV_SECRET_KEY,
+        "ok" if SECRET_KEY != DEV_SECRET_KEY else "uses development fallback",
+    )
+    add("DATABASE_URL", bool(os.environ.get("DATABASE_URL")), "set" if os.environ.get("DATABASE_URL") else "missing")
+    add("APP_BASE_URL", bool(APP_BASE_URL), "set" if APP_BASE_URL else "missing")
+
+    if EMAIL_PROVIDER == "smtp":
+        add("EMAIL_PROVIDER", True, "smtp")
+        add("EMAIL_FROM", bool(EMAIL_FROM), "set" if EMAIL_FROM else "missing")
+        add("SMTP_HOST", bool(SMTP_HOST), "set" if SMTP_HOST else "missing")
+        add("SMTP_PORT", bool(SMTP_PORT), "set" if SMTP_PORT else "missing")
+        add("SMTP_USERNAME", bool(SMTP_USERNAME), "set" if SMTP_USERNAME else "missing")
+        add("SMTP_PASSWORD", bool(SMTP_PASSWORD), "set" if SMTP_PASSWORD else "missing")
+    else:
+        add("EMAIL_PROVIDER", False, "smtp required in production")
+
+    add("SESSION_COOKIE_SECURE", app.config["SESSION_COOKIE_SECURE"], "enabled" if app.config["SESSION_COOKIE_SECURE"] else "disabled")
+    add("SESSION_COOKIE_HTTPONLY", app.config["SESSION_COOKIE_HTTPONLY"], "enabled" if app.config["SESSION_COOKIE_HTTPONLY"] else "disabled")
+    add("SESSION_COOKIE_SAMESITE", bool(app.config["SESSION_COOKIE_SAMESITE"]), "set" if app.config["SESSION_COOKIE_SAMESITE"] else "missing")
+    add("RATELIMIT_ENABLED", RATELIMIT_ENABLED, "enabled" if RATELIMIT_ENABLED else "disabled")
+    add(
+        "RATELIMIT_STORAGE_URI",
+        bool(RATELIMIT_STORAGE_URI),
+        "set; memory:// is single-process only" if RATELIMIT_STORAGE_URI == "memory://" else "set",
+    )
+
+    has_errors = False
+    click.echo("Production configuration check")
+    for name, ok, detail in checks:
+        status = "OK" if ok else "MISSING/ATTENTION"
+        click.echo(f"- {name}: {status} ({detail})")
+        if APP_ENV == "production" and not ok:
+            has_errors = True
+
+    if APP_ENV == "production" and RATELIMIT_STORAGE_URI == "memory://":
+        click.echo("- RATELIMIT_STORAGE_URI: ATTENTION (use Redis/shared storage for multi-worker or multi-host production)")
+
+    if has_errors:
+        raise click.ClickException("Production configuration is incomplete.")
+
 
 @app.cli.command("init-db")
 def init_db_command():

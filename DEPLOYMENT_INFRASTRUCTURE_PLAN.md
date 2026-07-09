@@ -666,3 +666,43 @@ K1 verification notes:
 [ ] Platform production environment shows every required variable set.
 [ ] Git history has been reviewed before launch for accidental real secrets.
 ```
+
+### July 8, 2026 — Substep K2: Enforce production config in the app
+
+Status: Completed in `app.py`.
+
+What was done:
+
+```text
+1. Added named constants for the known development fallback secret and the
+   minimum production SECRET_KEY length.
+2. Added validate_production_config(), called during app startup before Flask is
+   configured.
+3. Production startup now refuses:
+      - missing SECRET_KEY
+      - SECRET_KEY equal to dev-secret-key-change-before-production
+      - SECRET_KEY shorter than 64 characters
+4. Kept development behavior unchanged: local development can still use the
+   built-in dev fallback when APP_ENV is not production.
+5. Added `flask check-config`, which prints only environment variable names and
+   set/missing/attention status, never the secret values themselves.
+6. `check-config` reports:
+      - APP_ENV / SECRET_KEY readiness
+      - DATABASE_URL and APP_BASE_URL presence
+      - SMTP/email configuration readiness
+      - SESSION_COOKIE_SECURE / HTTPONLY / SAMESITE posture
+      - Flask-Limiter enabled state and RATELIMIT_STORAGE_URI posture
+```
+
+Verification performed locally:
+
+```text
+[x] APP_ENV=production with no SECRET_KEY refuses to import app.py.
+[x] APP_ENV=production with the dev fallback SECRET_KEY refuses to import app.py.
+[x] APP_ENV=production with a short SECRET_KEY refuses to import app.py.
+[x] APP_ENV=production with a generated 64+ char SECRET_KEY imports app.py.
+[x] Production session cookie config is Secure=True, HTTPOnly=True, SameSite=Lax.
+[x] `flask check-config` reports config names/status without printing secrets.
+[x] `python -m py_compile app.py` passes.
+[x] Existing pytest suite passes: 54 passed.
+```
