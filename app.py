@@ -4,10 +4,8 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from whitenoise import WhiteNoise
 from werkzeug.middleware.proxy_fix import ProxyFix
-from werkzeug.security import generate_password_hash, check_password_hash
-from itsdangerous import URLSafeTimedSerializer, BadData
+from itsdangerous import URLSafeTimedSerializer
 import csv
-from email.message import EmailMessage
 import io
 import json
 import logging
@@ -15,14 +13,32 @@ import os
 import psycopg2
 import qrcode
 import sentry_sdk
-import smtplib
 import sys
+from inventory.auth.passwords import (
+    hash_password as password_hash_password,
+    validate_password_strength as password_validate_password_strength,
+    verify_password as password_verify_password,
+)
+from inventory.auth.tokens import (
+    make_token as token_make_token,
+    read_token as token_read_token,
+)
+from inventory.items.barcodes import (
+    generate_next_item_barcode as barcode_generate_next_item_barcode,
+)
+from inventory.items.forms import parse_expiration_date as forms_parse_expiration_date
+from inventory.services.email import send_email as email_send_email
+from inventory.transactions.repository import (
+    build_transaction_filter_clause as transaction_build_filter_clause,
+    count_transaction_rows as transaction_count_rows,
+    get_transaction_rows as transaction_get_rows,
+)
 from psycopg2.extras import RealDictCursor
 from sentry_sdk.integrations.flask import FlaskIntegration
 import click
 import time
 import uuid
-from datetime import datetime, timedelta
+from datetime import timedelta
 from pathlib import Path
 
 # holds the parent path to the current script we are running.
@@ -421,26 +437,21 @@ def generate_next_item_barcode(db):
     # Draw the next unique number from the PostgreSQL sequence and format it as
     # a zero-padded internal code (e.g. KATZ-NURS-000001). The sequence
     # (item_barcode_number_seq) is created by the baseline migration.
-    number = db.execute("SELECT nextval('item_barcode_number_seq') AS number").fetchone()["number"]
-    return f"{BARCODE_PREFIX}-{number:06d}"
+    return barcode_generate_next_item_barcode(db, BARCODE_PREFIX)
 
 def hash_password(raw_password):
     # Werkzeug salts and hashes the password (PBKDF2 by default). The raw
     # password is never stored.
-    return generate_password_hash(raw_password)
+    return password_hash_password(raw_password)
 
 def verify_password(password_hash, raw_password):
     # A NULL/empty hash means the user was invited but has not set a password
     # yet, so they cannot authenticate.
-    if not password_hash:
-        return False
-    return check_password_hash(password_hash, raw_password)
+    return password_verify_password(password_hash, raw_password)
 
 def validate_password_strength(raw_password):
     # Returns an error message string, or None if the password is acceptable.
-    if not raw_password or len(raw_password) < MIN_PASSWORD_LENGTH:
-        return f"Password must be at least {MIN_PASSWORD_LENGTH} characters."
-    return None
+    return password_validate_password_strength(raw_password, MIN_PASSWORD_LENGTH)
 
 # In-memory failed-login tracker keyed by email. Per-process only (resets on
 # restart and is not shared across workers) — intentionally a lightweight
@@ -487,21 +498,13 @@ def make_token(user_id, purpose):
     # Build a signed, self-describing token for a one-off action link. The
     # purpose ("invite" or "reset") is embedded so a token minted for one flow
     # cannot be replayed against another.
-    return get_token_serializer().dumps({"user_id": user_id, "purpose": purpose})
+    return token_make_token(get_token_serializer(), user_id, purpose)
 
 def read_token(token, purpose, max_age):
     # Return the user_id if the token is valid, unexpired, and was minted for
     # this exact purpose; otherwise return None. Any tampering, expiry, or
     # purpose mismatch is treated the same way (rejected).
-    try:
-        data = get_token_serializer().loads(token, max_age=max_age)
-    except BadData:
-        return None
-
-    if not isinstance(data, dict) or data.get("purpose") != purpose:
-        return None
-
-    return data.get("user_id")
+    return token_read_token(get_token_serializer(), token, purpose, max_age)
 
 def send_email(to, subject, body):
     # Deliver a transactional email (invite / password reset). Returns True when
@@ -511,46 +514,21 @@ def send_email(to, subject, body):
     # visible in the server console and flows can be tested without external mail.
     #
     # Provider configured: send through SMTP using environment variables.
-    if EMAIL_PROVIDER == "smtp":
-        if not SMTP_HOST or not EMAIL_FROM:
-            raise RuntimeError("SMTP_HOST and EMAIL_FROM must be set to send email.")
-
-        message = EmailMessage()
-        message["From"] = EMAIL_FROM
-        message["To"] = to
-        message["Subject"] = subject
-        message.set_content(body)
-
-        if SMTP_USE_SSL:
-            with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=15) as smtp:
-                if SMTP_USERNAME:
-                    smtp.login(SMTP_USERNAME, SMTP_PASSWORD)
-                smtp.send_message(message)
-        else:
-            with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as smtp:
-                if SMTP_USE_TLS:
-                    smtp.starttls()
-                if SMTP_USERNAME:
-                    smtp.login(SMTP_USERNAME, SMTP_PASSWORD)
-                smtp.send_message(message)
-
-        return True
-
-    if EMAIL_PROVIDER:
-        raise RuntimeError(
-            f"Unsupported EMAIL_PROVIDER={EMAIL_PROVIDER!r}. Use EMAIL_PROVIDER=smtp."
-        )
-
-    if APP_ENV == "production":
-        raise RuntimeError("EMAIL_PROVIDER=smtp must be configured in production.")
-
-    app.logger.info(
-        "DEV EMAIL (not actually sent)\nTo: %s\nSubject: %s\n\n%s",
+    return email_send_email(
         to,
         subject,
         body,
+        provider=EMAIL_PROVIDER,
+        email_from=EMAIL_FROM,
+        smtp_host=SMTP_HOST,
+        smtp_port=SMTP_PORT,
+        smtp_username=SMTP_USERNAME,
+        smtp_password=SMTP_PASSWORD,
+        smtp_use_tls=SMTP_USE_TLS,
+        smtp_use_ssl=SMTP_USE_SSL,
+        app_env=APP_ENV,
+        logger=app.logger,
     )
-    return False
 
 def send_invite(user_id, email):
     # Email a "set your password" link for a newly created or re-invited user.
@@ -670,17 +648,7 @@ def parse_expiration_date(value):
     is stored as SQL NULL ("no expiration recorded"). The old '00/00/0000'
     sentinel is gone -- an unset date is NULL now.
     """
-    if not value:
-        return None
-    text = value.strip()
-    if not text:
-        return None
-    for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%m-%d-%Y", "%m/%d/%y"):
-        try:
-            return datetime.strptime(text, fmt).date()
-        except ValueError:
-            continue
-    return None
+    return forms_parse_expiration_date(value)
 
 def get_item_form_data(require_barcode=True):
     expiration_date = parse_expiration_date(request.form.get("expiration_date", ""))
@@ -1537,88 +1505,17 @@ def get_transaction_filters():
     }
 
 def build_transaction_filter_clause(filters):
-    conditions = []
-    params = []
-
-    if filters["date_from"]:
-        conditions.append("transactions.transaction_date >= %s")
-        params.append(filters["date_from"])
-
-    if filters["date_to"]:
-        conditions.append("transactions.transaction_date <= %s")
-        params.append(filters["date_to"])
-
-    if filters["item_id"].isdigit():
-        conditions.append("transactions.item_id = %s")
-        params.append(int(filters["item_id"]))
-
-    if filters["user_id"].isdigit():
-        conditions.append("transactions.user_id = %s")
-        params.append(int(filters["user_id"]))
-
-    if filters["lab_instructor"]:
-        conditions.append("transactions.lab_instructor = %s")
-        params.append(filters["lab_instructor"])
-
-    if filters["topic_of_day"]:
-        conditions.append("transactions.topic_of_day = %s")
-        params.append(filters["topic_of_day"])
-
-    if filters["transaction_type"] in {"add", "remove"}:
-        conditions.append("transactions.transaction_type = %s")
-        params.append(filters["transaction_type"])
-
-    where_clause = ""
-    if conditions:
-        where_clause = "WHERE " + " AND ".join(conditions)
-
-    return where_clause, params
+    return transaction_build_filter_clause(filters)
 
 def count_transaction_rows(db, filters):
     # Total matching rows, used to render pagination controls. The filter clause
     # only references transactions.* columns, so no JOINs are needed here.
-    where_clause, params = build_transaction_filter_clause(filters)
-
-    return db.execute(
-        "SELECT COUNT(*) AS total FROM transactions {where_clause}".format(
-            where_clause=where_clause
-        ),
-        params,
-    ).fetchone()["total"]
+    return transaction_count_rows(db, filters)
 
 def get_transaction_rows(db, filters, limit=None, offset=None):
     # limit/offset are for the on-screen paginated list. The CSV export calls
     # this WITHOUT them so it returns the full filtered result set.
-    where_clause, params = build_transaction_filter_clause(filters)
-
-    pagination = ""
-    if limit is not None:
-        pagination = "LIMIT %s OFFSET %s"
-        params = params + [limit, offset or 0]
-
-    return db.execute(
-        """
-        SELECT
-            transactions.id,
-            transactions.transaction_type,
-            transactions.quantity,
-            TO_CHAR(transactions.transaction_date, 'YYYY-MM-DD') AS transaction_date,
-            TO_CHAR(transactions.transaction_time, 'HH24:MI:SS') AS transaction_time,
-            transactions.lab_instructor,
-            transactions.topic_of_day,
-            transactions.notes,
-            items.name AS item_name,
-            items.barcode,
-            users.name AS user_name
-        FROM transactions
-        JOIN items ON items.id = transactions.item_id
-        JOIN users ON users.id = transactions.user_id
-        {where_clause}
-        ORDER BY transactions.transaction_date DESC, transactions.transaction_time DESC, transactions.id DESC
-        {pagination}
-        """.format(where_clause=where_clause, pagination=pagination),
-        params,
-    ).fetchall()
+    return transaction_get_rows(db, filters, limit=limit, offset=offset)
 
 def get_transaction_filter_options(db):
     items = db.execute(

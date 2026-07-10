@@ -120,7 +120,7 @@ Gaps this phase fixes/fixed:
 | 1 | Automated test suite (pytest) for auth, stock, and permissions | High | M | Step N | **Done** — stock, permissions, exports, and README test contract added; 80 tests passing |
 | 2 | Error monitoring (Sentry) + structured logging | High | S | Step O | **Done** — optional Sentry, request logging, and observability docs added |
 | 3 | Health-check endpoint + uptime monitoring | Medium | S | Step P | **Partial** — `/health` endpoint, tests, and uptime-monitor docs added; live monitor pending |
-| 4 | Split `app.py` into blueprints + service layer | Medium | L | Step Q | **Partial** — Q1 module-layout plan written; no app code moved yet |
+| 4 | Split `app.py` into blueprints + service layer | Medium | L | Step Q | **Partial** — Q1 plan and Q2 helper extraction done; blueprints pending |
 
 Cross-reference — already done elsewhere:
 
@@ -154,7 +154,7 @@ refactor (Q) is the largest change and should not block launch.
 Step N  Expand pytest coverage (stock, permissions, exports)     [done]
 Step O  Sentry + structured logging                              [done in code/docs]
 Step P  /health endpoint + uptime monitor                        [P1 done, P2 docs done; live monitor pending]
-Step Q  Blueprint / service-layer refactor                       [Q1 done; Q2-Q4 later, not a blocker]
+Step Q  Blueprint / service-layer refactor                       [Q1-Q2 done; Q3-Q4 later, not a blocker]
 ```
 
 ---
@@ -872,6 +872,54 @@ pytest -q full green after each extraction.
 No circular imports; py_compile clean.
 ```
 
+Implementation details — July 10, 2026:
+
+```text
+Status: DONE.
+
+Files changed:
+    app.py
+    ARCHITECTURE.md
+    inventory/__init__.py                         (new)
+    inventory/auth/__init__.py                    (new)
+    inventory/auth/passwords.py                   (new)
+    inventory/auth/tokens.py                      (new)
+    inventory/items/__init__.py                   (new)
+    inventory/items/barcodes.py                   (new)
+    inventory/items/forms.py                      (new)
+    inventory/services/__init__.py                (new)
+    inventory/services/email.py                   (new)
+    inventory/transactions/__init__.py            (new)
+    inventory/transactions/repository.py          (new)
+
+What was implemented:
+    Extracted pure helper logic out of app.py into small modules:
+        - password hashing/verification/strength validation
+        - signed invite/reset token creation and reading
+        - SMTP/dev email delivery
+        - next item barcode generation
+        - expiration-date parsing
+        - transaction filter SQL, count query, and row query helpers
+    app.py now imports these helpers and keeps thin compatibility wrapper
+    functions with the original names.
+
+Why:
+    This reduces app.py responsibility before any route movement. Keeping wrapper
+    functions prevents behavior changes and keeps current tests, routes, and
+    monkeypatch-based email fixtures stable during the transition.
+
+How:
+    New helper modules do not import the Flask app. Values that belong to app
+    config, such as BARCODE_PREFIX, MIN_PASSWORD_LENGTH, SMTP settings, APP_ENV,
+    and the token serializer, are passed in by app.py. This avoids circular
+    imports and keeps the helpers independently testable later.
+
+Verification completed:
+    python -m py_compile app.py and all new helper modules -> clean.
+    git diff --check -- app.py inventory ARCHITECTURE.md design_docx/QUALITY_OPERATIONS_PLAN.md -> clean.
+    pytest -q -> 82 passed.
+```
+
 ### Substep Q3 — Introduce blueprints
 
 Files:
@@ -955,7 +1003,8 @@ After Step Q (if done):
 [x] GET /health returns 200 with database ok; 503 path covered by regression test (Step P1)
 [ ] External uptime monitor alerts on failure after staging/production domain exists (Step P2)
 [x] Q1 module-layout plan written before any blueprint/service extraction (Step Q1)
-[ ] (Optional pre-launch) Blueprint/service extraction started only if team capacity allows (Step Q2-Q4)
+[x] Pure helpers extracted with route compatibility wrappers (Step Q2)
+[ ] (Optional pre-launch) Blueprint extraction started only if team capacity allows (Step Q3-Q4)
 ```
 
 ---

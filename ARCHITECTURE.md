@@ -127,7 +127,7 @@ Move in small batches and run the full test suite after each batch.
        services/email.py
        items/forms.py
        items/barcodes.py
-       transactions/filters.py
+       transactions/repository.py
 
 2. Extract database/config/logging:
        config.py
@@ -194,4 +194,46 @@ The current expected baseline after P1 is:
 
 ```text
 82 passed
+```
+
+## Q2 Extraction Status
+
+Completed on July 10, 2026:
+
+```text
+inventory/auth/passwords.py
+    hash_password()
+    verify_password()
+    validate_password_strength()
+
+inventory/auth/tokens.py
+    make_token()
+    read_token()
+
+inventory/items/barcodes.py
+    generate_next_item_barcode()
+
+inventory/items/forms.py
+    parse_expiration_date()
+
+inventory/services/email.py
+    send_email()
+
+inventory/transactions/repository.py
+    build_transaction_filter_clause()
+    count_transaction_rows()
+    get_transaction_rows()
+```
+
+`app.py` still exposes compatibility wrapper functions with the old names. This
+keeps existing routes and tests stable while the app is still a single Flask
+module. Blueprint extraction should happen later in Q3.
+
+Verification after Q2:
+
+```text
+python -m py_compile app.py inventory/auth/passwords.py inventory/auth/tokens.py \
+    inventory/items/barcodes.py inventory/items/forms.py inventory/services/email.py \
+    inventory/transactions/repository.py
+pytest -q -> 82 passed
 ```
