@@ -119,7 +119,7 @@ Gaps this phase fixes/fixed:
 |---|-------------|----------|--------|-----------|--------|
 | 1 | Automated test suite (pytest) for auth, stock, and permissions | High | M | Step N | **Done** — stock, permissions, exports, and README test contract added; 80 tests passing |
 | 2 | Error monitoring (Sentry) + structured logging | High | S | Step O | **Done** — optional Sentry, request logging, and observability docs added |
-| 3 | Health-check endpoint + uptime monitoring | Medium | S | Step P | **Partial** — `/health` JSON endpoint and tests added; external uptime monitor pending |
+| 3 | Health-check endpoint + uptime monitoring | Medium | S | Step P | **Partial** — `/health` endpoint, tests, and uptime-monitor docs added; live monitor pending |
 | 4 | Split `app.py` into blueprints + service layer | Medium | L | Step Q | To do (post-launch acceptable) |
 
 Cross-reference — already done elsewhere:
@@ -153,7 +153,7 @@ refactor (Q) is the largest change and should not block launch.
 ```text
 Step N  Expand pytest coverage (stock, permissions, exports)     [done]
 Step O  Sentry + structured logging                              [done in code/docs]
-Step P  /health endpoint + uptime monitor                        [P1 done, P2 pending]
+Step P  /health endpoint + uptime monitor                        [P1 done, P2 docs done; live monitor pending]
 Step Q  Blueprint / service-layer refactor                       [when needed; not a blocker]
 ```
 
@@ -721,6 +721,48 @@ Uptime monitor shows "up" after configuration.
 A deliberate DB outage (staging) triggers an alert within one interval.
 ```
 
+Implementation details — July 10, 2026:
+
+```text
+Status: DOCUMENTED; live external monitor setup waits for the hosted domain.
+
+Files changed:
+    README.md
+
+What was implemented:
+    Added an "Uptime monitoring" section to README.md with:
+        - the production health-check URL: https://<your-domain>/health
+        - manual curl verification from outside the hosting platform
+        - suggested monitor interval of 1-5 minutes
+        - expected normal response time under 500 ms
+        - alert triggers for non-200 responses, timeouts, and repeated slowness
+        - alert-channel options such as email, SMS, Slack, Teams, or helpdesk
+        - guidance to point host-level health checks at /health
+        - staging-only alert testing by temporarily breaking DB connectivity
+        - reminder not to use /db-status for automated monitoring
+
+Why:
+    P1 created the machine endpoint. P2 explains how an operator should wire that
+    endpoint into an external monitoring system so production outages are noticed
+    quickly instead of discovered manually.
+
+How:
+    README.md now separates human observability from machine health checks. It
+    keeps /db-status as the admin page and /health as the public, safe, automated
+    signal for hosting providers, load balancers, and external uptime monitors.
+
+Verification completed:
+    git diff --check -- README.md design_docx/QUALITY_OPERATIONS_PLAN.md -> clean.
+
+Remaining operational verification:
+    Once the app has a staging or production domain, run:
+        curl -i https://<domain>/health
+    Then configure the selected monitor and confirm:
+        - monitor shows "up"
+        - alert fires within one interval during a deliberate staging DB outage
+        - monitor recovers after DB configuration is restored
+```
+
 ---
 
 ## Step Q — Split `app.py` into blueprints + service layer
@@ -871,7 +913,7 @@ After Step Q (if done):
 [ ] SENTRY_DSN set on production; test exception received in Sentry (Step O)
 [x] Structured JSON logs implemented; platform log-drain visibility to confirm after deploy (Step O)
 [x] GET /health returns 200 with database ok; 503 path covered by regression test (Step P1)
-[ ] External uptime monitor alerts on failure (Step P)
+[ ] External uptime monitor alerts on failure after staging/production domain exists (Step P2)
 [ ] (Optional pre-launch) Blueprint refactor started only if team capacity allows (Step Q)
 ```
 

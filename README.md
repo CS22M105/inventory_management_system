@@ -445,6 +445,63 @@ To read logs:
   viewer. Gunicorn access/error logs and app request logs are both written to
   stdout/stderr.
 
+### Uptime monitoring
+
+The app exposes a public machine-readable health check:
+
+```text
+GET https://<your-domain>/health
+```
+
+Expected healthy response:
+
+```json
+{"database":"ok","status":"ok"}
+```
+
+Set up one external uptime monitor for the production domain:
+
+1. In the hosting provider, confirm the app is live at
+   `https://<your-domain>`.
+2. From outside the hosting platform, verify the health endpoint:
+
+```bash
+curl -i https://<your-domain>/health
+```
+
+3. Create an uptime check in UptimeRobot, Better Stack, Pingdom, the hosting
+   provider, or the university's monitoring tool.
+4. Use these settings:
+
+```text
+URL: https://<your-domain>/health
+Method: GET
+Expected status: 200
+Interval: 1-5 minutes
+Timeout: 10 seconds or less
+Expected response time: under 500 ms in normal operation
+Alert on: non-200 response, timeout, or repeated slow responses
+Alert channel: email, SMS, Slack, Teams, or the university helpdesk channel
+```
+
+5. If the host has a built-in health-check path, point it to `/health`.
+   Examples:
+   - Render: set the service health check path to `/health` if available for
+     the selected service type.
+   - Railway: use `/health` for service health checks or any configured
+     monitor.
+   - Fly.io/VM reverse proxy: configure the load balancer or reverse proxy
+     health check to request `/health`.
+6. After configuration, confirm the monitor status changes to **up**.
+7. On staging only, test alerting by temporarily pointing the staging app at an
+   invalid database URL or stopping the staging database. The monitor should
+   alert within one check interval. Restore the database configuration and
+   confirm the monitor recovers.
+
+Do not use `/db-status` for uptime monitoring. It is an administrator page that
+requires login and returns human-facing HTML. `/health` is intentionally small,
+public, and safe for automated monitoring.
+
 The app intentionally does **not** log:
 
 - Passwords.
