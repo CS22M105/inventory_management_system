@@ -2,7 +2,7 @@
 
 from flask import Blueprint, jsonify, redirect, render_template, url_for
 
-import app as app_module
+import inventory.core as app_module
 
 
 bp = Blueprint("dashboard", __name__)

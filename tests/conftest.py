@@ -27,6 +27,7 @@ import psycopg2  # noqa: E402
 import pytest  # noqa: E402
 
 import app as app_module  # noqa: E402
+import inventory.core as core_module  # noqa: E402
 
 # Shared password for every seeded user that has one.
 SEED_PASSWORD = "Password123"
@@ -169,6 +170,7 @@ def captured_emails(monkeypatch):
         return True
 
     monkeypatch.setattr(app_module, "send_email", fake_send_email)
+    monkeypatch.setattr(core_module, "send_email", fake_send_email)
     return sent
 
 

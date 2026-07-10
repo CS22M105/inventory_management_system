@@ -120,7 +120,7 @@ Gaps this phase fixes/fixed:
 | 1 | Automated test suite (pytest) for auth, stock, and permissions | High | M | Step N | **Done** — stock, permissions, exports, and README test contract added; 80 tests passing |
 | 2 | Error monitoring (Sentry) + structured logging | High | S | Step O | **Done** — optional Sentry, request logging, and observability docs added |
 | 3 | Health-check endpoint + uptime monitoring | Medium | S | Step P | **Partial** — `/health` endpoint, tests, and uptime-monitor docs added; live monitor pending |
-| 4 | Split `app.py` into blueprints + service layer | Medium | L | Step Q | **Partial** — Q1 plan, Q2 helper extraction, and Q3 blueprints done; thin entrypoint pending |
+| 4 | Split `app.py` into blueprints + service layer | Medium | L | Step Q | **Done** — Q1 plan, Q2 helpers, Q3 blueprints, and Q4 thin entrypoint complete |
 
 Cross-reference — already done elsewhere:
 
@@ -154,7 +154,7 @@ refactor (Q) is the largest change and should not block launch.
 Step N  Expand pytest coverage (stock, permissions, exports)     [done]
 Step O  Sentry + structured logging                              [done in code/docs]
 Step P  /health endpoint + uptime monitor                        [P1 done, P2 docs done; live monitor pending]
-Step Q  Blueprint / service-layer refactor                       [Q1-Q3 done; Q4 later, not a blocker]
+Step Q  Blueprint / service-layer refactor                       [done]
 ```
 
 ---
@@ -1026,6 +1026,62 @@ Full pytest suite green.
 No single file over ~400 lines except possibly transactions/admin if needed.
 ```
 
+Implementation details — July 10, 2026:
+
+```text
+Status: DONE.
+
+Files changed:
+    app.py
+    README.md
+    ARCHITECTURE.md
+    design_docx/QUALITY_OPERATIONS_PLAN.md
+    inventory/__init__.py
+    inventory/core.py
+    inventory/config.py                         (new)
+    inventory/db.py                             (new)
+    inventory/cli.py                            (new)
+    inventory/observability.py                  (new)
+    inventory/items/forms.py
+    inventory/stock/service.py                  (new)
+    inventory/transactions/repository.py
+    tests/conftest.py
+    tests/test_health.py
+
+What was implemented:
+    Made app.py a thin compatibility entrypoint:
+        from inventory import create_app
+        app = create_app()
+    Added inventory.create_app(), which returns the configured Flask app and
+    registers blueprints idempotently.
+    Split remaining core responsibilities into package modules:
+        - config.py for env/config constants and production guards
+        - db.py for PostgreSQL connection helpers
+        - cli.py for Flask CLI commands
+        - observability.py for Sentry and request logging
+        - stock/service.py for stock transaction logic
+    README.md now documents the contributor-facing package layout.
+
+Why:
+    A thin app.py keeps Flask CLI and Gunicorn stable while moving the real app
+    into the package. This reduces the last monolithic file and gives future
+    contributors clearer ownership boundaries.
+
+How:
+    app.py still exposes compatibility attributes for tests and old imports, but
+    app construction is now owned by inventory.create_app(). Gunicorn and Procfile
+    can continue using gunicorn app:app -c gunicorn.conf.py.
+
+Verification completed:
+    python -m py_compile app.py inventory/*.py inventory/*/*.py -> clean.
+    pytest -q -> 82 passed.
+    flask --app app db-upgrade -> ran successfully against a scratch PostgreSQL
+        database, then the scratch database was dropped.
+    gunicorn app:app -c gunicorn.conf.py -> served GET /health with 200 OK.
+    File-size check: app.py is 9 lines; largest non-route module is
+        inventory/core.py at 398 lines. Route modules remain under 400 lines.
+```
+
 ---
 
 ## Consolidated testing plan
@@ -1058,7 +1114,7 @@ After Step Q (if done):
 [x] Q1 module-layout plan written before any blueprint/service extraction (Step Q1)
 [x] Pure helpers extracted with route compatibility wrappers (Step Q2)
 [x] Route registrations moved into blueprints with original browser URLs preserved (Step Q3)
-[ ] Thin create_app() entrypoint completed only if team capacity allows (Step Q4)
+[x] Thin create_app() entrypoint completed and documented (Step Q4)
 ```
 
 ---

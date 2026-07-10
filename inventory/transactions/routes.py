@@ -5,7 +5,7 @@ import io
 
 from flask import Blueprint, Response, render_template, request, url_for
 
-from app import (
+from inventory.core import (
     TRANSACTIONS_PAGE_SIZE,
     count_transaction_rows,
     get_db,

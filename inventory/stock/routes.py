@@ -2,7 +2,7 @@
 
 from flask import Blueprint, abort, render_template, request
 
-from app import (
+from inventory.core import (
     RATELIMIT_STOCK,
     get_db,
     get_stock_item,

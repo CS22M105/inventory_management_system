@@ -5,7 +5,7 @@ import io
 
 from flask import Blueprint, Response
 
-from app import get_db, require_admin
+from inventory.core import get_db, require_admin
 
 
 bp = Blueprint("reports", __name__)

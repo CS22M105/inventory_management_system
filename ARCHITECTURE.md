@@ -39,13 +39,12 @@ inventory/
     __init__.py              create_app() factory; extension setup; blueprint registration
     config.py                env parsing, constants, production guards
     db.py                    Database wrapper, get_db(), close_db()
-    logging_config.py        Sentry setup, JSON/text logging, request_id helpers
-    security.py              CSRF, security headers, ProxyFix/HSTS helpers
+    observability.py         Sentry setup, JSON/text logging, request_id helpers
+    core.py                  Flask app assembly and shared route helpers
     cli.py                   init-db, db-upgrade, db-downgrade, set-password, check-config
 
     auth/
         routes.py            login, logout, reauth, forgot/reset password, set-password
-        permissions.py       require_login, require_admin, require_item_manager, sudo checks
         tokens.py            make_token(), read_token()
         passwords.py         hash/verify password, password-strength validation
 
@@ -56,7 +55,6 @@ inventory/
         routes.py            all items, low stock, item detail, add, edit
         forms.py             item form parsing and expiration-date parsing
         barcodes.py          barcode/QR generation helpers
-        labels.py            QR PNG and print-label response helpers
 
     stock/
         routes.py            scan page and item stock page
@@ -64,18 +62,16 @@ inventory/
 
     transactions/
         routes.py            transaction history and transaction CSV export
-        filters.py           get/build filters, filter options
         repository.py        count/get transaction rows
 
     admin/
         routes.py            user management and db-status
-        users.py             role-management rules and account actions
 
     reports/
         routes.py            inventory CSV export
 
     services/
-        email.py             send_email(), send_invite(), send_reset()
+        email.py             send_email()
 ```
 
 ## Ownership Boundaries
@@ -283,9 +279,9 @@ admin.admin_users
 admin.db_status
 ```
 
-`app.py` registers all blueprints through `register_blueprints(app)`. Q4 can
-later move app creation into `inventory.create_app()` while keeping a thin
-compatibility `app.py`.
+`inventory.create_app()` registers all blueprints through
+`core.register_blueprints(core.app)`. `app.py` is now a thin compatibility
+entrypoint for Flask CLI, Gunicorn, and older imports.
 
 Verification after Q3:
 
@@ -293,4 +289,42 @@ Verification after Q3:
 python -m py_compile app.py inventory/*/routes.py
 pytest tests/test_health.py -v -> 2 passed
 pytest -q -> 82 passed
+```
+
+## Q4 Thin Entrypoint Status
+
+Completed on July 10, 2026:
+
+```text
+app.py
+    from inventory import create_app
+    app = create_app()
+
+inventory/__init__.py
+    create_app() returns the configured app and registers blueprints idempotently
+
+inventory/core.py
+    app assembly and compatibility wrappers
+
+inventory/config.py
+    environment-backed configuration
+
+inventory/db.py
+    Database wrapper and get_db()/close_db()
+
+inventory/cli.py
+    check-config, init-db, db-upgrade, db-downgrade, set-password
+
+inventory/observability.py
+    Sentry setup and structured request logging
+```
+
+Verification after Q4:
+
+```text
+python -m py_compile app.py inventory/*.py inventory/*/*.py
+pytest -q -> 82 passed
+flask --app app db-upgrade -> worked against scratch PostgreSQL database
+gunicorn app:app -c gunicorn.conf.py -> served /health with 200 OK
+Largest non-route module: inventory/core.py at 398 lines
 ```

@@ -3,7 +3,7 @@
 from flask import Blueprint, flash, redirect, render_template, request, session, url_for
 import psycopg2
 
-from app import (
+from inventory.core import (
     allowed_user_roles_to_manage,
     app,
     can_manage_user_role,

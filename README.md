@@ -33,6 +33,36 @@ This project will use:
 - **PostgreSQL** for the database.
 - **HTML/CSS/JavaScript** for the user interface.
 
+## Project Structure
+
+The Flask app now uses a package layout:
+
+```text
+app.py                  thin compatibility entrypoint for Flask/Gunicorn
+inventory/
+    __init__.py         create_app()
+    core.py             app assembly and shared route helpers
+    config.py           environment configuration and production guards
+    db.py               PostgreSQL connection helpers
+    cli.py              Flask CLI commands
+    observability.py    Sentry and request logging
+    auth/               auth routes, password helpers, token helpers
+    dashboard/          dashboard and /health routes
+    items/              item routes, forms, barcode helpers
+    stock/              scan/stock routes and stock service
+    transactions/       transaction routes and query helpers
+    reports/            inventory export route
+    admin/              user management and db-status routes
+    services/           integration helpers such as email
+```
+
+The current supported entrypoint remains:
+
+```bash
+flask --app app run --debug
+gunicorn app:app -c gunicorn.conf.py
+```
+
 ## Virtual Environment
 
 The project virtual environment is named:

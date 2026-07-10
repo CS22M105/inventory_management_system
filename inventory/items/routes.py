@@ -6,7 +6,7 @@ from flask import Blueprint, Response, abort, redirect, render_template, request
 import psycopg2
 import qrcode
 
-from app import (
+from inventory.core import (
     APP_BASE_URL,
     generate_next_item_barcode,
     get_db,

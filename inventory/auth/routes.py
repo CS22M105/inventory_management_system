@@ -2,7 +2,7 @@
 
 from flask import Blueprint, flash, redirect, render_template, request, session, url_for
 
-from app import (
+from inventory.core import (
     INVITE_TOKEN_MAX_AGE,
     RATELIMIT_LOGIN,
     RATELIMIT_PASSWORD,
