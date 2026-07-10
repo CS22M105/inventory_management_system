@@ -120,7 +120,7 @@ Gaps this phase fixes/fixed:
 | 1 | Automated test suite (pytest) for auth, stock, and permissions | High | M | Step N | **Done** — stock, permissions, exports, and README test contract added; 80 tests passing |
 | 2 | Error monitoring (Sentry) + structured logging | High | S | Step O | **Done** — optional Sentry, request logging, and observability docs added |
 | 3 | Health-check endpoint + uptime monitoring | Medium | S | Step P | **Partial** — `/health` endpoint, tests, and uptime-monitor docs added; live monitor pending |
-| 4 | Split `app.py` into blueprints + service layer | Medium | L | Step Q | To do (post-launch acceptable) |
+| 4 | Split `app.py` into blueprints + service layer | Medium | L | Step Q | **Partial** — Q1 module-layout plan written; no app code moved yet |
 
 Cross-reference — already done elsewhere:
 
@@ -154,7 +154,7 @@ refactor (Q) is the largest change and should not block launch.
 Step N  Expand pytest coverage (stock, permissions, exports)     [done]
 Step O  Sentry + structured logging                              [done in code/docs]
 Step P  /health endpoint + uptime monitor                        [P1 done, P2 docs done; live monitor pending]
-Step Q  Blueprint / service-layer refactor                       [when needed; not a blocker]
+Step Q  Blueprint / service-layer refactor                       [Q1 done; Q2-Q4 later, not a blocker]
 ```
 
 ---
@@ -805,6 +805,46 @@ Verify:
 Written plan reviewed; no code change yet. Test suite green before any move.
 ```
 
+Implementation details — July 10, 2026:
+
+```text
+Status: DONE.
+
+Files changed:
+    ARCHITECTURE.md   (new)
+    design_docx/QUALITY_OPERATIONS_PLAN.md
+
+What was implemented:
+    Added a written architecture/refactor plan for the future app.py split.
+    The plan defines:
+        - target inventory/ package layout
+        - create_app() application-factory direction
+        - a temporary thin app.py compatibility path
+        - ownership boundaries for auth, items, stock, transactions, admin,
+          reports, database, config, logging, security, CLI, and services
+        - safe extraction order for Q2-Q4
+        - compatibility rules for routes, templates, endpoint names, database
+          migrations, stock transaction behavior, deployment, and tests
+
+Why:
+    app.py is large and touches many product areas. Planning the boundaries first
+    reduces refactor risk and prevents a future route move from accidentally
+    changing permissions, URLs, stock behavior, templates, or deployment commands.
+
+How:
+    ARCHITECTURE.md maps the current app into a future inventory/ package. It
+    keeps existing local and production entrypoints working during the transition:
+        flask --app app run --debug
+        gunicorn app:app -c gunicorn.conf.py
+    The long-term target remains:
+        gunicorn "inventory:create_app()" -c gunicorn.conf.py
+
+Verification completed:
+    No app code changed.
+    git diff --check -- ARCHITECTURE.md design_docx/QUALITY_OPERATIONS_PLAN.md -> clean.
+    pytest -q -> 82 passed before any code move.
+```
+
 ### Substep Q2 — Extract services (no route changes yet)
 
 Files:
@@ -914,7 +954,8 @@ After Step Q (if done):
 [x] Structured JSON logs implemented; platform log-drain visibility to confirm after deploy (Step O)
 [x] GET /health returns 200 with database ok; 503 path covered by regression test (Step P1)
 [ ] External uptime monitor alerts on failure after staging/production domain exists (Step P2)
-[ ] (Optional pre-launch) Blueprint refactor started only if team capacity allows (Step Q)
+[x] Q1 module-layout plan written before any blueprint/service extraction (Step Q1)
+[ ] (Optional pre-launch) Blueprint/service extraction started only if team capacity allows (Step Q2-Q4)
 ```
 
 ---
