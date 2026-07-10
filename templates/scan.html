@@ -15,7 +15,7 @@
     <p class="success-message">{{ message }}</p>
     {% endif %}
 
-    <form method="post" action="{{ url_for('scan') }}">
+    <form method="post" action="{{ url_for('stock.scan') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label for="barcode">Barcode</label>
         <input

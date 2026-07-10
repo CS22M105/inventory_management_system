@@ -71,14 +71,14 @@
     </table>
 
     <div class="action-group" style="margin-top: 24px;">
-        <a class="button-link" href="{{ url_for('item_stock', barcode=item['barcode']) }}">Stock Action</a>
+        <a class="button-link" href="{{ url_for('stock.item_stock', barcode=item['barcode']) }}">Stock Action</a>
         {% if session.get("user_role") in ["faculty", "administrator"] %}
-        <a class="button-link" href="{{ url_for('item_label', barcode=item['barcode']) }}">Print Label</a>
+        <a class="button-link" href="{{ url_for('items.item_label', barcode=item['barcode']) }}">Print Label</a>
         {% endif %}
         {% if session.get("user_role") in ["faculty", "administrator"] %}
-        <a class="button-link" href="{{ url_for('item_edit', item_id=item['id']) }}">Edit Item</a>
+        <a class="button-link" href="{{ url_for('items.item_edit', item_id=item['id']) }}">Edit Item</a>
         {% endif %}
-        <a class="button-link secondary-link" href="{{ url_for('items') }}">All Items</a>
+        <a class="button-link secondary-link" href="{{ url_for('items.items') }}">All Items</a>
     </div>
 </section>
 {% endblock %}

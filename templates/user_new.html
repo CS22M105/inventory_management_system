@@ -11,7 +11,7 @@
     <p class="error-message">{{ error }}</p>
     {% endif %}
 
-    <form method="post" action="{{ url_for('admin_user_new') }}">
+    <form method="post" action="{{ url_for('admin.admin_user_new') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label for="name">Full Name</label>
         <input

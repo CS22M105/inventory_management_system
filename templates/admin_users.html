@@ -10,7 +10,7 @@
             <p>View registered users who can access the inventory system.</p>
         </div>
 
-        <a class="button-link" href="{{ url_for('admin_user_new') }}">Add User</a>
+        <a class="button-link" href="{{ url_for('admin.admin_user_new') }}">Add User</a>
     </div>
 
     <table>
@@ -50,25 +50,25 @@
                     {% elif user["is_active"] %}
                     <div class="action-group">
                         {% if user["invite_pending"] %}
-                        <form class="inline-form" method="post" action="{{ url_for('admin_user_resend_invite', user_id=user['id']) }}">
+                        <form class="inline-form" method="post" action="{{ url_for('admin.admin_user_resend_invite', user_id=user['id']) }}">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <button type="submit">Resend invite</button>
                         </form>
                         {% endif %}
-                        <form class="inline-form" method="post" action="{{ url_for('admin_user_deactivate', user_id=user['id']) }}">
+                        <form class="inline-form" method="post" action="{{ url_for('admin.admin_user_deactivate', user_id=user['id']) }}">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <button class="danger-button" type="submit">Deactivate</button>
                         </form>
                     </div>
                     {% else %}
                     <div class="action-group">
-                        <form class="inline-form" method="post" action="{{ url_for('admin_user_activate', user_id=user['id']) }}">
+                        <form class="inline-form" method="post" action="{{ url_for('admin.admin_user_activate', user_id=user['id']) }}">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <button type="submit">Reactivate</button>
                         </form>
 
                         {% if user["transaction_count"] == 0 %}
-                        <form class="inline-form" method="post" action="{{ url_for('admin_user_delete', user_id=user['id']) }}">
+                        <form class="inline-form" method="post" action="{{ url_for('admin.admin_user_delete', user_id=user['id']) }}">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <button class="danger-button" type="submit">Delete</button>
                         </form>

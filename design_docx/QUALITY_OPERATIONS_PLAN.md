@@ -120,7 +120,7 @@ Gaps this phase fixes/fixed:
 | 1 | Automated test suite (pytest) for auth, stock, and permissions | High | M | Step N | **Done** — stock, permissions, exports, and README test contract added; 80 tests passing |
 | 2 | Error monitoring (Sentry) + structured logging | High | S | Step O | **Done** — optional Sentry, request logging, and observability docs added |
 | 3 | Health-check endpoint + uptime monitoring | Medium | S | Step P | **Partial** — `/health` endpoint, tests, and uptime-monitor docs added; live monitor pending |
-| 4 | Split `app.py` into blueprints + service layer | Medium | L | Step Q | **Partial** — Q1 plan and Q2 helper extraction done; blueprints pending |
+| 4 | Split `app.py` into blueprints + service layer | Medium | L | Step Q | **Partial** — Q1 plan, Q2 helper extraction, and Q3 blueprints done; thin entrypoint pending |
 
 Cross-reference — already done elsewhere:
 
@@ -154,7 +154,7 @@ refactor (Q) is the largest change and should not block launch.
 Step N  Expand pytest coverage (stock, permissions, exports)     [done]
 Step O  Sentry + structured logging                              [done in code/docs]
 Step P  /health endpoint + uptime monitor                        [P1 done, P2 docs done; live monitor pending]
-Step Q  Blueprint / service-layer refactor                       [Q1-Q2 done; Q3-Q4 later, not a blocker]
+Step Q  Blueprint / service-layer refactor                       [Q1-Q3 done; Q4 later, not a blocker]
 ```
 
 ---
@@ -947,6 +947,59 @@ After each blueprint batch: pytest -q green; manual smoke of moved routes.
 url_for endpoint names unchanged OR updated consistently in templates.
 ```
 
+Implementation details — July 10, 2026:
+
+```text
+Status: DONE.
+
+Files changed:
+    app.py
+    templates/*.html
+    inventory/admin/__init__.py                  (new)
+    inventory/admin/routes.py                    (new)
+    inventory/auth/routes.py                     (new)
+    inventory/dashboard/__init__.py              (new)
+    inventory/dashboard/routes.py                (new)
+    inventory/items/routes.py                    (new)
+    inventory/reports/__init__.py                (new)
+    inventory/reports/routes.py                  (new)
+    inventory/stock/__init__.py                  (new)
+    inventory/stock/routes.py                    (new)
+    inventory/transactions/routes.py             (new)
+    ARCHITECTURE.md
+    design_docx/QUALITY_OPERATIONS_PLAN.md
+
+What was implemented:
+    Moved route registrations from app.py into blueprints:
+        - dashboard: /, /health, /dashboard
+        - auth: login, logout, reauth, forgot/reset password, set-password
+        - items: item list, low-stock list, detail, add, edit, QR PNG, label
+        - stock: /scan and /items/<barcode>/stock
+        - transactions: transaction history and transaction CSV export
+        - reports: inventory CSV export
+        - admin: user management and /db-status
+    app.py now registers those blueprints through register_blueprints(app).
+
+Why:
+    The route layer was the largest remaining part of app.py. Moving routes into
+    feature modules reduces the chance that unrelated future edits collide in one
+    file and prepares the app for a create_app() factory in Q4.
+
+How:
+    Existing browser URLs were preserved. Flask endpoint names now use blueprint
+    namespaces such as auth.login, items.item_new, stock.scan,
+    transactions.transactions, reports.export_inventory, and admin.admin_users.
+    Templates and internal url_for(...) calls were updated consistently. Shared
+    helpers that are still not pure services, such as process_stock_transaction()
+    and transaction filter request parsing, remain in app.py for Q4 or later.
+
+Verification completed:
+    python -m py_compile app.py and all route modules -> clean.
+    Imported app and inspected the URL map; original browser paths are present.
+    pytest tests/test_health.py -v -> 2 passed.
+    pytest -q -> 82 passed.
+```
+
 ### Substep Q4 — Thin entrypoint + docs
 
 Files:
@@ -1004,7 +1057,8 @@ After Step Q (if done):
 [ ] External uptime monitor alerts on failure after staging/production domain exists (Step P2)
 [x] Q1 module-layout plan written before any blueprint/service extraction (Step Q1)
 [x] Pure helpers extracted with route compatibility wrappers (Step Q2)
-[ ] (Optional pre-launch) Blueprint extraction started only if team capacity allows (Step Q3-Q4)
+[x] Route registrations moved into blueprints with original browser URLs preserved (Step Q3)
+[ ] Thin create_app() entrypoint completed only if team capacity allows (Step Q4)
 ```
 
 ---

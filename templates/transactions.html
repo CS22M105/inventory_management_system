@@ -11,7 +11,7 @@
         </div>
     </div>
 
-    <form class="filter-form" method="get" action="{{ url_for('transactions') }}">
+    <form class="filter-form" method="get" action="{{ url_for('transactions.transactions') }}">
         <div>
             <label for="date_from">From Date</label>
             <input
@@ -91,7 +91,7 @@
 
         <div class="filter-actions">
             <button type="submit">Apply Filters</button>
-            <a class="button-link secondary-link" href="{{ url_for('transactions') }}">Clear Filters</a>
+            <a class="button-link secondary-link" href="{{ url_for('transactions.transactions') }}">Clear Filters</a>
         </div>
     </form>
 

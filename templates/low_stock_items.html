@@ -10,7 +10,7 @@
             <p>Items shown here are at or below their minimum quantity.</p>
         </div>
 
-        <a class="button-link" href="{{ url_for('items') }}">All Items</a>
+        <a class="button-link" href="{{ url_for('items.items') }}">All Items</a>
     </div>
 
     {% if items %}
@@ -43,7 +43,7 @@
                 <td>{{ item["minimum_quantity"] - item["quantity"] }}</td>
                 {% if session.get("user_role") in ["faculty", "administrator"] %}
                 <td>
-                    <a class="table-action-link" href="{{ url_for('item_edit', item_id=item['id']) }}">Edit</a>
+                    <a class="table-action-link" href="{{ url_for('items.item_edit', item_id=item['id']) }}">Edit</a>
                 </td>
                 {% endif %}
             </tr>

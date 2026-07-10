@@ -31,7 +31,7 @@
 
         <article>
             <h3>Low-Stock Items</h3>
-            <p><a class="dashboard-number-link" href="{{ url_for('low_stock_items') }}">{{ low_stock_items }}</a></p>
+            <p><a class="dashboard-number-link" href="{{ url_for('items.low_stock_items') }}">{{ low_stock_items }}</a></p>
         </article>
 
         <article>
@@ -82,7 +82,7 @@
         var stopButton = document.getElementById("stop-camera-scan");
         var statusText = document.getElementById("camera-scan-status");
         var cameraReader = document.getElementById("camera-reader");
-        var stockUrlTemplate = "{{ url_for('item_stock', barcode='__BARCODE__') }}";
+        var stockUrlTemplate = "{{ url_for('stock.item_stock', barcode='__BARCODE__') }}";
         var qrScanner = null;
         var scanLocked = false;
 

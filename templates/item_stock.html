@@ -10,7 +10,7 @@
             <p>Record stock added to or removed from this item.</p>
         </div>
 
-        <a class="button-link secondary-link" href="{{ url_for('item_detail', barcode=item['barcode']) }}">Item Details</a>
+        <a class="button-link secondary-link" href="{{ url_for('items.item_detail', barcode=item['barcode']) }}">Item Details</a>
     </div>
 
     {% if error %}
@@ -34,7 +34,7 @@
         </article>
     </div>
 
-    <form method="post" action="{{ url_for('item_stock', barcode=item['barcode']) }}">
+    <form method="post" action="{{ url_for('stock.item_stock', barcode=item['barcode']) }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label for="transaction_type">Action</label>
         <select id="transaction_type" name="transaction_type" required>

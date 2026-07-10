@@ -227,7 +227,7 @@ inventory/transactions/repository.py
 
 `app.py` still exposes compatibility wrapper functions with the old names. This
 keeps existing routes and tests stable while the app is still a single Flask
-module. Blueprint extraction should happen later in Q3.
+module.
 
 Verification after Q2:
 
@@ -235,5 +235,62 @@ Verification after Q2:
 python -m py_compile app.py inventory/auth/passwords.py inventory/auth/tokens.py \
     inventory/items/barcodes.py inventory/items/forms.py inventory/services/email.py \
     inventory/transactions/repository.py
+pytest -q -> 82 passed
+```
+
+## Q3 Blueprint Status
+
+Completed on July 10, 2026:
+
+```text
+inventory/dashboard/routes.py
+    /, /health, /dashboard
+
+inventory/auth/routes.py
+    /login, /logout, /reauth, /forgot-password, /reset-password/<token>,
+    /set-password/<token>
+
+inventory/items/routes.py
+    /items, /items/low-stock, /items/<barcode>, /items/new,
+    /items/<int:item_id>/edit, /items/<barcode>/qr.png,
+    /items/<barcode>/label
+
+inventory/stock/routes.py
+    /scan, /items/<barcode>/stock
+
+inventory/transactions/routes.py
+    /transactions, /transactions/export
+
+inventory/reports/routes.py
+    /reports/export
+
+inventory/admin/routes.py
+    /admin/users, /admin/users/new, admin user action POST routes, /db-status
+```
+
+The browser URLs stayed the same. Flask endpoint names are now blueprint
+namespaced, so templates and internal redirects use names such as:
+
+```text
+auth.login
+dashboard.dashboard
+items.items
+items.item_new
+stock.scan
+transactions.transactions
+reports.export_inventory
+admin.admin_users
+admin.db_status
+```
+
+`app.py` registers all blueprints through `register_blueprints(app)`. Q4 can
+later move app creation into `inventory.create_app()` while keeping a thin
+compatibility `app.py`.
+
+Verification after Q3:
+
+```text
+python -m py_compile app.py inventory/*/routes.py
+pytest tests/test_health.py -v -> 2 passed
 pytest -q -> 82 passed
 ```

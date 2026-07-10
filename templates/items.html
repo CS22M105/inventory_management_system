@@ -11,7 +11,7 @@
         </div>
 
         {% if session.get("user_role") in ["faculty", "administrator"] %}
-        <a class="button-link" href="{{ url_for('item_new') }}">Add New Item</a>
+        <a class="button-link" href="{{ url_for('items.item_new') }}">Add New Item</a>
         {% endif %}
     </div>
 
@@ -41,10 +41,10 @@
                 <td>{{ item["minimum_quantity"] }}</td>
                 <td>
                     <span class="action-group">
-                        <a class="table-action-link" href="{{ url_for('item_detail', barcode=item['barcode']) }}">View</a>
+                        <a class="table-action-link" href="{{ url_for('items.item_detail', barcode=item['barcode']) }}">View</a>
                         {% if session.get("user_role") in ["faculty", "administrator"] %}
-                        <a class="table-action-link" href="{{ url_for('item_label', barcode=item['barcode']) }}">Print Label</a>
-                        <a class="table-action-link" href="{{ url_for('item_edit', item_id=item['id']) }}">Edit</a>
+                        <a class="table-action-link" href="{{ url_for('items.item_label', barcode=item['barcode']) }}">Print Label</a>
+                        <a class="table-action-link" href="{{ url_for('items.item_edit', item_id=item['id']) }}">Edit</a>
                         {% endif %}
                     </span>
                 </td>

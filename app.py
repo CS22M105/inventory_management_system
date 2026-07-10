@@ -536,7 +536,7 @@ def send_invite(user_id, email):
     # fallback base URL, mirroring the QR-code link builder).
     token = make_token(user_id, "invite")
     base_url = APP_BASE_URL or request.host_url.rstrip("/")
-    link = f"{base_url}{url_for('set_password', token=token)}"
+    link = f"{base_url}{url_for('auth.set_password', token=token)}"
     sent = send_email(
         email,
         "Set your Katz Nursing Inventory password",
@@ -549,7 +549,7 @@ def send_reset(user_id, email):
     # Email a password-reset link. Must be called within a request context.
     token = make_token(user_id, "reset")
     base_url = APP_BASE_URL or request.host_url.rstrip("/")
-    link = f"{base_url}{url_for('reset_password', token=token)}"
+    link = f"{base_url}{url_for('auth.reset_password', token=token)}"
     sent = send_email(
         email,
         "Reset your Katz Nursing Inventory password",
@@ -561,7 +561,7 @@ def send_reset(user_id, email):
 
 def require_login():
     if "user_id" not in session:
-        return redirect(url_for("login"))
+        return redirect(url_for("auth.login"))
 
     return None
 
@@ -575,7 +575,7 @@ def has_fresh_sudo():
         return False
     return (time.time() - sudo_at) <= SUDO_MODE_MAX_AGE
 
-def safe_next(target, fallback_endpoint="admin_users"):
+def safe_next(target, fallback_endpoint="admin.admin_users"):
     # Only allow same-site relative paths as post-re-auth redirect targets, so
     # the ?next= parameter cannot be used for an open redirect.
     if target and target.startswith("/") and not target.startswith("//"):
@@ -591,7 +591,7 @@ def require_sudo():
         return login_redirect
 
     if not has_fresh_sudo():
-        return redirect(url_for("reauth", next=url_for("admin_users")))
+        return redirect(url_for("auth.reauth", next=url_for("admin.admin_users")))
 
     return None
 
@@ -602,7 +602,7 @@ def require_admin():
         return login_redirect
 
     if session.get("user_role") not in ELEVATED_ROLES:
-        return redirect(url_for("dashboard"))
+        return redirect(url_for("dashboard.dashboard"))
 
     return None
 
@@ -613,7 +613,7 @@ def require_system_admin():
         return login_redirect
 
     if session.get("user_role") != "administrator":
-        return redirect(url_for("dashboard"))
+        return redirect(url_for("dashboard.dashboard"))
 
     return None
 
@@ -624,7 +624,7 @@ def require_item_manager():
         return login_redirect
 
     if session.get("user_role") not in ELEVATED_ROLES:
-        return redirect(url_for("items"))
+        return redirect(url_for("items.items"))
 
     return None
 
@@ -840,518 +840,9 @@ def set_password_command(email, password):
 
     click.echo(f"Password set for {email}.")
 
-@app.route("/")
-def home():
-    return redirect(url_for("login"))
-
-@app.route("/health")
-def health():
-    try:
-        get_db().execute("SELECT 1").fetchone()
-    except Exception:
-        return jsonify({"status": "error", "database": "error"}), 503
-
-    return jsonify({"status": "ok", "database": "ok"})
-
-@app.route("/login", methods=["GET", "POST"])
-@limiter.limit(RATELIMIT_LOGIN, methods=["POST"])
-def login():
-    if request.method == "POST":
-        email = request.form.get("email", "").strip().lower()
-        password = request.form.get("password", "")
-
-        # Refuse further attempts once an email has failed too many times in a
-        # row, until the cooldown elapses. Generic message, no enumeration.
-        if is_locked_out(email):
-            return render_template(
-                "login.html",
-                error="Too many failed attempts. Please try again later.",
-            ), 429
-
-        db = get_db()
-        user = db.execute(
-            """
-            SELECT id, email, name, role, password_hash
-            FROM users
-            WHERE LOWER(email) = %s AND is_active = TRUE
-            """,
-            (email,),
-        ).fetchone()
-
-        # One generic message for every failure (unknown email, wrong password,
-        # inactive account, or an invited user who has not set a password yet)
-        # so we never reveal which emails are registered.
-        if user is None or not verify_password(user["password_hash"], password):
-            record_failed_login(email)
-            # Warn on the final remaining try so the user is not surprised by the
-            # lockout. Shown for any email (not just registered ones), so it does
-            # not reveal whether the email exists.
-            warning = None
-            if remaining_login_attempts(email) == 1:
-                warning = "This is your last attempt before your account is temporarily locked."
-            return render_template(
-                "login.html",
-                error="Invalid email or password.",
-                warning=warning,
-            ), 401
-
-        clear_failed_login(email)
-
-        db.execute(
-            "UPDATE users SET last_login_at = CURRENT_TIMESTAMP WHERE id = %s",
-            (user["id"],),
-        )
-        db.commit()
-
-        # Clear any existing session data before establishing the new one to
-        # avoid session fixation. Privileges derive solely from the account role.
-        session.clear()
-        # Mark permanent so PERMANENT_SESSION_LIFETIME (idle timeout) applies.
-        session.permanent = True
-        session["user_id"] = user["id"]
-        session["user_name"] = user["name"]
-        session["user_role"] = user["role"]
-        session["email"] = user["email"]
-        # A fresh login counts as a recent password proof for "sudo mode".
-        mark_sudo()
-
-        return redirect(url_for("dashboard"))
-
-    return render_template("login.html")
-
-@app.route("/logout", methods=["POST"])
-def logout():
-    session.clear()
-    return redirect(url_for("login"))
-
-@app.route("/reauth", methods=["GET", "POST"])
-def reauth():
-    # Confirm the logged-in user's password before a destructive admin action
-    # ("sudo mode"). This protects shared/lab computers where a session may be
-    # left open.
-    login_redirect = require_login()
-    if login_redirect is not None:
-        return login_redirect
-
-    next_url = safe_next(request.values.get("next"))
-
-    if request.method == "POST":
-        password = request.form.get("password", "")
-        db = get_db()
-        user = db.execute(
-            "SELECT password_hash FROM users WHERE id = %s AND is_active = TRUE",
-            (session.get("user_id"),),
-        ).fetchone()
-
-        if user is None or not verify_password(user["password_hash"], password):
-            return render_template(
-                "reauth.html",
-                next=next_url,
-                error="Incorrect password.",
-            ), 401
-
-        mark_sudo()
-        return redirect(next_url)
-
-    return render_template("reauth.html", next=next_url)
-
-@app.route("/forgot-password", methods=["GET", "POST"])
-@limiter.limit(RATELIMIT_PASSWORD, methods=["POST"])
-def forgot_password():
-    if request.method == "POST":
-        email = request.form.get("email", "").strip().lower()
-        db = get_db()
-        user = db.execute(
-            "SELECT id, email FROM users WHERE LOWER(email) = %s AND is_active = TRUE",
-            (email,),
-        ).fetchone()
-
-        if user is not None:
-            try:
-                reset = send_reset(user["id"], user["email"])
-            except Exception as error:
-                app.logger.exception("Password reset email failed for %s", user["email"])
-                flash(
-                    "Password reset email could not be sent. Please check email "
-                    f"settings and try again. Error: {error}",
-                    "error",
-                )
-            else:
-                if reset["sent"]:
-                    flash("Password reset email sent.", "success")
-                else:
-                    flash(
-                        "Email is not configured locally, so no message was sent. "
-                        f"Reset link: {reset['link']}",
-                        "warning",
-                    )
-
-        # Always show the same confirmation, whether or not the email matched a
-        # real account, so the form cannot be used to discover registered emails.
-        return render_template("forgot_password.html", sent=True)
-
-    return render_template("forgot_password.html")
-
-@app.route("/reset-password/<token>", methods=["GET", "POST"])
-@limiter.limit(RATELIMIT_PASSWORD, methods=["POST"])
-def reset_password(token):
-    # No login required: the signed "reset" token is the credential.
-    user_id = read_token(token, "reset", RESET_TOKEN_MAX_AGE)
-
-    if user_id is None:
-        return render_template("reset_password.html", invalid=True), 400
-
-    db = get_db()
-    user = db.execute(
-        "SELECT id, email FROM users WHERE id = %s AND is_active = TRUE",
-        (user_id,),
-    ).fetchone()
-
-    if user is None:
-        return render_template("reset_password.html", invalid=True), 400
-
-    if request.method == "POST":
-        password = request.form.get("password", "")
-        confirm_password = request.form.get("confirm_password", "")
-
-        error = validate_password_strength(password)
-        if not error and password != confirm_password:
-            error = "Passwords do not match."
-
-        if error:
-            return render_template("reset_password.html", token=token, error=error), 400
-
-        db.execute(
-            "UPDATE users SET password_hash = %s WHERE id = %s",
-            (hash_password(password), user["id"]),
-        )
-        db.commit()
-
-        return redirect(url_for("login"))
-
-    return render_template("reset_password.html", token=token)
-
-@app.route("/dashboard")
-def dashboard():
-    login_redirect = require_login()
-
-    if login_redirect is not None:
-        return login_redirect
-
-    db = get_db()
-    total_items = db.execute("SELECT COUNT(*) AS total FROM items").fetchone()["total"]
-    low_stock_items = db.execute(
-        """
-        SELECT COUNT(*) AS total
-        FROM items
-        WHERE quantity <= minimum_quantity
-        """
-    ).fetchone()["total"]
-    total_transactions = db.execute("SELECT COUNT(*) AS total FROM transactions").fetchone()["total"]
-    recent_transactions = db.execute(
-        """
-        SELECT
-            transactions.transaction_type,
-            transactions.quantity,
-            TO_CHAR(transactions.transaction_date, 'YYYY-MM-DD') AS transaction_date,
-            TO_CHAR(transactions.transaction_time, 'HH24:MI:SS') AS transaction_time,
-            transactions.lab_instructor,
-            transactions.topic_of_day,
-            items.name AS item_name,
-            users.name AS user_name
-        FROM transactions
-        JOIN items ON items.id = transactions.item_id
-        JOIN users ON users.id = transactions.user_id
-        ORDER BY transactions.transaction_date DESC, transactions.transaction_time DESC, transactions.id DESC
-        LIMIT 5
-        """
-    ).fetchall()
-
-    return render_template(
-        "dashboard.html",
-        total_items=total_items,
-        low_stock_items=low_stock_items,
-        total_transactions=total_transactions,
-        recent_transactions=recent_transactions,
-    )
-
-@app.route("/items")
-def items():
-    login_redirect = require_login()
-
-    if login_redirect is not None:
-        return login_redirect
-
-    db = get_db()
-    inventory_items = db.execute(
-        """
-        SELECT id, barcode, name, bin_location, room, company, quantity, minimum_quantity
-        FROM items
-        ORDER BY name
-        """
-    ).fetchall()
-
-    return render_template("items.html", items=inventory_items)
-
-@app.route("/items/low-stock")
-def low_stock_items():
-    login_redirect = require_login()
-
-    if login_redirect is not None:
-        return login_redirect
-
-    db = get_db()
-    inventory_items = db.execute(
-        """
-        SELECT id, barcode, name, bin_location, room, company, quantity, minimum_quantity
-        FROM items
-        WHERE quantity <= minimum_quantity
-        ORDER BY quantity ASC, name
-        """
-    ).fetchall()
-
-    return render_template("low_stock_items.html", items=inventory_items)
-
-@app.route("/items/<barcode>")
-def item_detail(barcode):
-    login_redirect = require_login()
-
-    if login_redirect is not None:
-        return login_redirect
-
-    db = get_db()
-    item = db.execute(
-        """
-        SELECT
-            id,
-            barcode,
-            name,
-            bin_location,
-            room,
-            company,
-            quantity,
-            minimum_quantity,
-            location,
-            expiration_date,
-            notes
-        FROM items
-        WHERE barcode = %s
-        """,
-        (barcode,),
-    ).fetchone()
-
-    if item is None:
-        abort(404, description="Not recognized")
-
-    return render_template("item_detail.html", item=item)
-
-@app.route("/items/<barcode>/qr.png")
-def item_qr_png(barcode):
-    login_redirect = require_item_manager()
-
-    if login_redirect is not None:
-        return login_redirect
-
-    db = get_db()
-    item = db.execute(
-        "SELECT id FROM items WHERE barcode = %s",
-        (barcode,),
-    ).fetchone()
-
-    if item is None:
-        abort(404, description="Not recognized")
-
-    # Build the URL the QR code points to: the per-item stock page. Prefer the
-    # configured public base URL; fall back to the current request host in dev.
-    # The path is assembled as a string (not url_for) because the stock route
-    # is added in a later step, and this route must work before that exists.
-    base_url = APP_BASE_URL or request.host_url.rstrip("/")
-    stock_url = f"{base_url}/items/{barcode}/stock"
-
-    qr = qrcode.QRCode(
-        version=1,
-        error_correction=qrcode.constants.ERROR_CORRECT_M,
-        box_size=10,
-        border=4,
-    )
-    qr.add_data(stock_url)
-    qr.make(fit=True)
-    image = qr.make_image(fill_color="black", back_color="white")
-
-    buffer = io.BytesIO()
-    image.save(buffer, format="PNG")
-
-    return Response(buffer.getvalue(), mimetype="image/png")
-
-@app.route("/items/<barcode>/label")
-def item_label(barcode):
-    login_redirect = require_item_manager()
-
-    if login_redirect is not None:
-        return login_redirect
-
-    db = get_db()
-    item = db.execute(
-        """
-        SELECT barcode, name, room, bin_location, company, expiration_date
-        FROM items
-        WHERE barcode = %s
-        """,
-        (barcode,),
-    ).fetchone()
-
-    if item is None:
-        abort(404, description="Not recognized")
-
-    return render_template("item_label.html", item=item)
-
-@app.route("/items/new", methods=["GET", "POST"])
-def item_new():
-    manager_redirect = require_item_manager()
-
-    if manager_redirect is not None:
-        return manager_redirect
-
-    if request.method == "POST":
-        item_data, error = get_item_form_data(require_barcode=False)
-
-        if error:
-            return render_template("item_new.html", error=error, item=item_data), 400
-
-        db = get_db()
-
-        # Blank barcode means the user wants an auto-generated internal code.
-        if not item_data["barcode"]:
-            item_data["barcode"] = generate_next_item_barcode(db)
-
-        try:
-            db.execute(
-                """
-                INSERT INTO items (
-                    barcode, name, bin_location, room, company,
-                    quantity, minimum_quantity, location, expiration_date, notes
-                )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """,
-                (
-                    item_data["barcode"],
-                    item_data["name"],
-                    item_data["bin_location"],
-                    item_data["room"],
-                    item_data["company"],
-                    item_data["quantity"],
-                    item_data["minimum_quantity"],
-                    item_data["location"],
-                    item_data["expiration_date"],
-                    item_data["notes"],
-                ),
-            )
-            db.commit()
-        except psycopg2.IntegrityError:
-            db.rollback()
-            return render_template(
-                "item_new.html",
-                error="An item with this barcode already exists.",
-                item=item_data,
-            ), 400
-
-        return redirect(url_for("items"))
-
-    return render_template("item_new.html", item={})
-
-@app.route("/items/<int:item_id>/edit", methods=["GET", "POST"])
-def item_edit(item_id):
-    manager_redirect = require_item_manager()
-
-    if manager_redirect is not None:
-        return manager_redirect
-
-    db = get_db()
-    item = db.execute(
-        """
-        SELECT
-            id,
-            barcode,
-            name,
-            bin_location,
-            room,
-            company,
-            quantity,
-            minimum_quantity,
-            location,
-            expiration_date,
-            notes
-        FROM items
-        WHERE id = %s
-        """,
-        (item_id,),
-    ).fetchone()
-
-    if item is None:
-        abort(404)
-
-    if request.method == "POST":
-        item_data, error = get_item_form_data()
-
-        if error:
-            item_data["id"] = item_id
-            return render_template("item_edit.html", error=error, item=item_data), 400
-
-        try:
-            db.execute(
-                """
-                UPDATE items
-                SET
-                    barcode = %s,
-                    name = %s,
-                    bin_location = %s,
-                    room = %s,
-                    company = %s,
-                    quantity = %s,
-                    minimum_quantity = %s,
-                    location = %s,
-                    expiration_date = %s,
-                    notes = %s
-                WHERE id = %s
-                """,
-                (
-                    item_data["barcode"],
-                    item_data["name"],
-                    item_data["bin_location"],
-                    item_data["room"],
-                    item_data["company"],
-                    item_data["quantity"],
-                    item_data["minimum_quantity"],
-                    item_data["location"],
-                    item_data["expiration_date"],
-                    item_data["notes"],
-                    item_id,
-                ),
-            )
-            db.commit()
-        except psycopg2.IntegrityError:
-            db.rollback()
-            item_data["id"] = item_id
-            return render_template(
-                "item_edit.html",
-                error="An item with this barcode already exists.",
-                item=item_data,
-            ), 400
-
-        return redirect(url_for("items"))
-
-    return render_template("item_edit.html", item=item)
 
 def process_stock_transaction(barcode, form):
-    """Validate and apply one add/remove stock transaction.
-
-    Reads action/quantity/instructor/topic/notes from `form`, validates them,
-    finds the item by `barcode`, updates its quantity, and records a
-    transaction row for the logged-in user. Returns a
-    (message, error, status_code) tuple where exactly one of message/error is
-    set. Shared by /scan and the per-item QR stock page so both behave
-    identically.
-    """
+    """Validate and apply one add/remove stock transaction."""
     transaction_type = form.get("transaction_type", "").strip()
     lab_instructor = form.get("lab_instructor", "").strip()
     topic_of_day = form.get("topic_of_day", "").strip()
@@ -1371,9 +862,6 @@ def process_stock_transaction(barcode, form):
     if quantity <= 0:
         return None, "Quantity must be greater than zero.", 400
 
-    # Every entry must be filled before a transaction is recorded. The form
-    # marks these required, but an accidental Enter (e.g. from a barcode
-    # scanner) can bypass client-side checks, so enforce it here too.
     if not lab_instructor:
         return None, "Lab Instructor is required.", 400
 
@@ -1434,26 +922,6 @@ def process_stock_transaction(barcode, form):
 
     return f"{item['name']} updated successfully. New quantity: {new_quantity}.", None, 200
 
-@app.route("/scan", methods=["GET", "POST"])
-@limiter.limit(RATELIMIT_STOCK)
-def scan():
-    login_redirect = require_login()
-
-    if login_redirect is not None:
-        return login_redirect
-
-    if request.method == "POST":
-        message, error, status = process_stock_transaction(
-            request.form.get("barcode", "").strip(),
-            request.form,
-        )
-
-        if error:
-            return render_template("scan.html", error=error), status
-
-        return render_template("scan.html", message=message)
-
-    return render_template("scan.html")
 
 def get_stock_item(db, barcode):
     return db.execute(
@@ -1465,33 +933,6 @@ def get_stock_item(db, barcode):
         (barcode,),
     ).fetchone()
 
-@app.route("/items/<barcode>/stock", methods=["GET", "POST"])
-@limiter.limit(RATELIMIT_STOCK)
-def item_stock(barcode):
-    login_redirect = require_login()
-
-    if login_redirect is not None:
-        return login_redirect
-
-    db = get_db()
-    item = get_stock_item(db, barcode)
-
-    if item is None:
-        abort(404, description="Not recognized")
-
-    if request.method == "POST":
-        # The barcode is taken from the URL, not a form field, so it cannot be
-        # tampered with from the browser and the route already identifies the item.
-        message, error, status = process_stock_transaction(barcode, request.form)
-        # Re-read so the page reflects the current quantity after the update.
-        item = get_stock_item(db, barcode)
-
-        if error:
-            return render_template("item_stock.html", item=item, error=error), status
-
-        return render_template("item_stock.html", item=item, message=message)
-
-    return render_template("item_stock.html", item=item)
 
 def get_transaction_filters():
     return {
@@ -1504,18 +945,18 @@ def get_transaction_filters():
         "transaction_type": request.args.get("transaction_type", "").strip(),
     }
 
+
 def build_transaction_filter_clause(filters):
     return transaction_build_filter_clause(filters)
 
+
 def count_transaction_rows(db, filters):
-    # Total matching rows, used to render pagination controls. The filter clause
-    # only references transactions.* columns, so no JOINs are needed here.
     return transaction_count_rows(db, filters)
 
+
 def get_transaction_rows(db, filters, limit=None, offset=None):
-    # limit/offset are for the on-screen paginated list. The CSV export calls
-    # this WITHOUT them so it returns the full filtered result set.
     return transaction_get_rows(db, filters, limit=limit, offset=offset)
+
 
 def get_transaction_filter_options(db):
     items = db.execute(
@@ -1551,511 +992,25 @@ def get_transaction_filter_options(db):
 
     return items, users, lab_instructors, topics
 
-@app.route("/transactions")
-def transactions():
-    login_redirect = require_login()
 
-    if login_redirect is not None:
-        return login_redirect
+def register_blueprints(flask_app):
+    from inventory.admin.routes import bp as admin_bp
+    from inventory.auth.routes import bp as auth_bp
+    from inventory.dashboard.routes import bp as dashboard_bp
+    from inventory.items.routes import bp as items_bp
+    from inventory.reports.routes import bp as reports_bp
+    from inventory.stock.routes import bp as stock_bp
+    from inventory.transactions.routes import bp as transactions_bp
+
+    flask_app.register_blueprint(dashboard_bp)
+    flask_app.register_blueprint(auth_bp)
+    flask_app.register_blueprint(items_bp)
+    flask_app.register_blueprint(stock_bp)
+    flask_app.register_blueprint(transactions_bp)
+    flask_app.register_blueprint(reports_bp)
+    flask_app.register_blueprint(admin_bp)
+
+
+register_blueprints(app)
 
-    db = get_db()
-
-    filters = get_transaction_filters()
-    items, users, lab_instructors, topics = get_transaction_filter_options(db)
-
-    export_params = {key: value for key, value in filters.items() if value}
-
-    # Server-side pagination. Total drives the controls; page is clamped so an
-    # out-of-range ?page= (e.g. after tightening a filter) lands on a valid page.
-    total = count_transaction_rows(db, filters)
-    page_size = TRANSACTIONS_PAGE_SIZE
-    total_pages = max(1, (total + page_size - 1) // page_size)
-
-    try:
-        page = int(request.args.get("page", "1"))
-    except ValueError:
-        page = 1
-    page = max(1, min(page, total_pages))
-
-    offset = (page - 1) * page_size
-    transaction_rows = get_transaction_rows(
-        db, filters, limit=page_size, offset=offset
-    )
-
-    # Page links carry the active filters (but not the old page number) so
-    # navigation preserves filters; submitting the filter form omits ?page= and
-    # therefore resets to page 1.
-    prev_url = (
-        url_for("transactions", page=page - 1, **export_params)
-        if page > 1
-        else None
-    )
-    next_url = (
-        url_for("transactions", page=page + 1, **export_params)
-        if page < total_pages
-        else None
-    )
-
-    return render_template(
-        "transactions.html",
-        transactions=transaction_rows,
-        filters=filters,
-        items=items,
-        users=users,
-        lab_instructors=lab_instructors,
-        topics=topics,
-        export_url=url_for("export_transactions", **export_params),
-        page=page,
-        total_pages=total_pages,
-        total=total,
-        page_size=page_size,
-        has_prev=page > 1,
-        has_next=page < total_pages,
-        prev_url=prev_url,
-        next_url=next_url,
-    )
-
-@app.route("/transactions/export")
-def export_transactions():
-    login_redirect = require_login()
-
-    if login_redirect is not None:
-        return login_redirect
-
-    db = get_db()
-    transaction_rows = get_transaction_rows(db, get_transaction_filters())
-
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(
-        [
-            "Date",
-            "Time",
-            "Action",
-            "Item",
-            "Barcode",
-            "Quantity",
-            "Lab Instructor",
-            "Topic",
-            "User",
-            "Notes",
-        ]
-    )
-
-    for transaction in transaction_rows:
-        writer.writerow(
-            [
-                transaction["transaction_date"],
-                transaction["transaction_time"],
-                transaction["transaction_type"],
-                transaction["item_name"],
-                transaction["barcode"],
-                transaction["quantity"],
-                transaction["lab_instructor"],
-                transaction["topic_of_day"],
-                transaction["user_name"],
-                transaction["notes"],
-            ]
-        )
-
-    return Response(
-        output.getvalue(),
-        mimetype="text/csv",
-        headers={"Content-Disposition": "attachment; filename=transaction_history_export.csv"},
-    )
-
-@app.route("/reports/export")
-def export_inventory():
-    admin_redirect = require_admin()
-
-    if admin_redirect is not None:
-        return admin_redirect
-
-    db = get_db()
-    inventory_items = db.execute(
-        """
-        SELECT
-            barcode,
-            name,
-            bin_location,
-            room,
-            company,
-            quantity,
-            minimum_quantity,
-            location,
-            expiration_date,
-            notes
-        FROM items
-        ORDER BY name
-        """
-    ).fetchall()
-
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(
-        [
-            "Barcode",
-            "Item Name",
-            "Bin Location",
-            "Room",
-            "Vendor",
-            "Quantity",
-            "Minimum Quantity",
-            "General Location",
-            "Expiration Date",
-            "Notes",
-        ]
-    )
-
-    for item in inventory_items:
-        writer.writerow(
-            [
-                item["barcode"],
-                item["name"],
-                item["bin_location"],
-                item["room"],
-                item["company"],
-                item["quantity"],
-                item["minimum_quantity"],
-                item["location"],
-                item["expiration_date"],
-                item["notes"],
-            ]
-        )
-
-    return Response(
-        output.getvalue(),
-        mimetype="text/csv",
-        headers={"Content-Disposition": "attachment; filename=inventory_export.csv"},
-    )
-
-@app.route("/admin/users")
-def admin_users():
-    admin_redirect = require_admin()
-
-    if admin_redirect is not None:
-        return admin_redirect
-
-    db = get_db()
-    users = db.execute(
-        """
-        SELECT
-            id,
-            institution_id,
-            email,
-            name,
-            role,
-            department,
-            is_active,
-            password_hash IS NULL AS invite_pending,
-            (
-                SELECT COUNT(*)
-                FROM transactions
-                WHERE transactions.user_id = users.id
-            ) AS transaction_count
-        FROM users
-        ORDER BY name
-        """
-    ).fetchall()
-
-    return render_template(
-        "admin_users.html",
-        users=users,
-        can_manage_user_role=can_manage_user_role,
-    )
-
-@app.route("/admin/users/new", methods=["GET", "POST"])
-def admin_user_new():
-    admin_redirect = require_admin()
-
-    if admin_redirect is not None:
-        return admin_redirect
-
-    allowed_roles = allowed_user_roles_to_manage()
-    role_options = [
-        ("student", "Student"),
-        ("faculty", "Faculty"),
-    ]
-    role_options = [role for role in role_options if role[0] in allowed_roles]
-
-    if request.method == "POST":
-        institution_id = request.form.get("institution_id", "").strip()
-        email = request.form.get("email", "").strip().lower()
-        name = request.form.get("name", "").strip()
-        role = request.form.get("role", "").strip()
-        department = request.form.get("department", "").strip()
-
-        if not email or not name or role not in allowed_roles:
-            return render_template(
-                "user_new.html",
-                error="Name, email, and an allowed role are required.",
-                role_options=role_options,
-            ), 400
-
-        db = get_db()
-
-        try:
-            # password_hash is left NULL: the account is "invited" until the
-            # user sets a password via the emailed link. institution_id is
-            # optional, so store NULL (not "") when blank to avoid collisions.
-            new_user = db.execute(
-                """
-                INSERT INTO users (institution_id, email, name, role, department)
-                VALUES (%s, %s, %s, %s, %s)
-                RETURNING id
-                """,
-                (institution_id or None, email, name, role, department),
-            ).fetchone()
-            db.commit()
-        except psycopg2.IntegrityError:
-            db.rollback()
-            return render_template(
-                "user_new.html",
-                error="A user with this email or institution ID already exists.",
-                role_options=role_options,
-            ), 400
-
-        try:
-            invite = send_invite(new_user["id"], email)
-        except Exception as error:
-            app.logger.exception("Invite email failed for %s", email)
-            flash(
-                "User was created, but the invite email could not be sent. "
-                f"Please check email settings and use Resend invite. Error: {error}",
-                "error",
-            )
-        else:
-            if invite["sent"]:
-                flash(f"Invite email sent to {email}.", "success")
-            else:
-                flash(
-                    "User was created. Email is not configured locally, so no "
-                    f"message was sent. Invite link: {invite['link']}",
-                    "warning",
-                )
-        return redirect(url_for("admin_users"))
-
-    return render_template("user_new.html", role_options=role_options)
-
-@app.route("/set-password/<token>", methods=["GET", "POST"])
-@limiter.limit(RATELIMIT_PASSWORD, methods=["POST"])
-def set_password(token):
-    # No login required: the signed "invite" token is the credential. The
-    # password-reset flow (A5) is a separate route with its own "reset" token,
-    # so an invite link cannot be used as a reset link or vice versa.
-    user_id = read_token(token, "invite", INVITE_TOKEN_MAX_AGE)
-
-    if user_id is None:
-        return render_template("set_password.html", invalid=True), 400
-
-    db = get_db()
-    user = db.execute(
-        "SELECT id, email, name FROM users WHERE id = %s AND is_active = TRUE",
-        (user_id,),
-    ).fetchone()
-
-    if user is None:
-        return render_template("set_password.html", invalid=True), 400
-
-    if request.method == "POST":
-        password = request.form.get("password", "")
-        confirm_password = request.form.get("confirm_password", "")
-
-        error = validate_password_strength(password)
-        if not error and password != confirm_password:
-            error = "Passwords do not match."
-
-        if error:
-            return render_template(
-                "set_password.html", user=user, token=token, error=error
-            ), 400
-
-        db.execute(
-            "UPDATE users SET password_hash = %s WHERE id = %s",
-            (hash_password(password), user["id"]),
-        )
-        db.commit()
-
-        return redirect(url_for("login"))
-
-    return render_template("set_password.html", user=user, token=token)
-
-@app.route("/admin/users/<int:user_id>/resend-invite", methods=["POST"])
-def admin_user_resend_invite(user_id):
-    admin_redirect = require_admin()
-
-    if admin_redirect is not None:
-        return admin_redirect
-
-    db = get_db()
-    user = db.execute(
-        "SELECT id, email, role, password_hash FROM users WHERE id = %s",
-        (user_id,),
-    ).fetchone()
-
-    # Only re-invite a manageable account that is still pending (no password set
-    # yet). Activated accounts should use the password-reset flow instead.
-    if user is None or not can_manage_user_role(user["role"]) or user["password_hash"] is not None:
-        return redirect(url_for("admin_users"))
-
-    try:
-        invite = send_invite(user["id"], user["email"])
-    except Exception as error:
-        app.logger.exception("Invite email failed for %s", user["email"])
-        flash(
-            "Invite email could not be sent. Please check email settings and "
-            f"try again. Error: {error}",
-            "error",
-        )
-    else:
-        if invite["sent"]:
-            flash(f"Invite email sent to {user['email']}.", "success")
-        else:
-            flash(
-                "Email is not configured locally, so no message was sent. "
-                f"Invite link: {invite['link']}",
-                "warning",
-            )
-
-    return redirect(url_for("admin_users"))
-
-@app.route("/admin/users/<int:user_id>/deactivate", methods=["POST"])
-def admin_user_deactivate(user_id):
-    admin_redirect = require_admin()
-
-    if admin_redirect is not None:
-        return admin_redirect
-
-    sudo_redirect = require_sudo()
-    if sudo_redirect is not None:
-        return sudo_redirect
-
-    if user_id == session.get("user_id"):
-        return redirect(url_for("admin_users"))
-
-    db = get_db()
-    user = db.execute(
-        """
-        SELECT id, role
-        FROM users
-        WHERE id = %s
-        """,
-        (user_id,),
-    ).fetchone()
-
-    if user is None or not can_manage_user_role(user["role"]):
-        return redirect(url_for("admin_users"))
-
-    db.execute(
-        """
-        UPDATE users
-        SET is_active = FALSE
-        WHERE id = %s
-        """,
-        (user_id,),
-    )
-    db.commit()
-
-    return redirect(url_for("admin_users"))
-
-@app.route("/admin/users/<int:user_id>/activate", methods=["POST"])
-def admin_user_activate(user_id):
-    admin_redirect = require_admin()
-
-    if admin_redirect is not None:
-        return admin_redirect
-
-    db = get_db()
-    user = db.execute(
-        """
-        SELECT id, role
-        FROM users
-        WHERE id = %s
-        """,
-        (user_id,),
-    ).fetchone()
-
-    if user is None or not can_manage_user_role(user["role"]):
-        return redirect(url_for("admin_users"))
-
-    db.execute(
-        """
-        UPDATE users
-        SET is_active = TRUE
-        WHERE id = %s
-        """,
-        (user_id,),
-    )
-    db.commit()
-
-    return redirect(url_for("admin_users"))
-
-@app.route("/admin/users/<int:user_id>/delete", methods=["POST"])
-def admin_user_delete(user_id):
-    admin_redirect = require_admin()
-
-    if admin_redirect is not None:
-        return admin_redirect
-
-    sudo_redirect = require_sudo()
-    if sudo_redirect is not None:
-        return sudo_redirect
-
-    if user_id == session.get("user_id"):
-        return redirect(url_for("admin_users"))
-
-    db = get_db()
-    user = db.execute(
-        """
-        SELECT id, role, is_active
-        FROM users
-        WHERE id = %s
-        """,
-        (user_id,),
-    ).fetchone()
-
-    if user is None or user["is_active"] or not can_manage_user_role(user["role"]):
-        return redirect(url_for("admin_users"))
-
-    transaction_count = db.execute(
-        """
-        SELECT COUNT(*) AS total
-        FROM transactions
-        WHERE user_id = %s
-        """,
-        (user_id,),
-    ).fetchone()["total"]
-
-    if transaction_count > 0:
-        return redirect(url_for("admin_users"))
-
-    db.execute(
-        """
-        DELETE FROM users
-        WHERE id = %s
-        """,
-        (user_id,),
-    )
-    db.commit()
-
-    return redirect(url_for("admin_users"))
-
-@app.route("/db-status")
-def db_status():
-    admin_redirect = require_system_admin()
-
-    if admin_redirect is not None:
-        return admin_redirect
-
-    db = get_db()
-    user_count = db.execute("SELECT COUNT(*) AS total FROM users").fetchone()["total"]
-    item_count = db.execute("SELECT COUNT(*) AS total FROM items").fetchone()["total"]
-    transaction_count = db.execute("SELECT COUNT(*) AS total FROM transactions").fetchone()["total"]
-
-    return render_template(
-        "db_status.html",
-        user_count=user_count,
-        item_count=item_count,
-        transaction_count=transaction_count,
-    )
 # to run : invent/bin/python -m flask --app app init-db

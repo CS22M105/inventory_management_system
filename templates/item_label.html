@@ -16,7 +16,7 @@
         <p class="qr-label-name">{{ item["name"] }}</p>
         <p class="qr-label-code">{{ item["barcode"] }}</p>
         <img
-            src="{{ url_for('item_qr_png', barcode=item['barcode']) }}"
+            src="{{ url_for('items.item_qr_png', barcode=item['barcode']) }}"
             alt="QR code for {{ item['barcode'] }}"
         >
         <p class="qr-label-meta">Room: {{ item["room"] }}</p>
@@ -31,8 +31,8 @@
 
     <div class="action-group no-print" style="margin-top: 24px;">
         <button type="button" onclick="window.print()">Print Label</button>
-        <a class="button-link secondary-link" href="{{ url_for('item_detail', barcode=item['barcode']) }}">Back to Item</a>
-        <a class="button-link secondary-link" href="{{ url_for('items') }}">Back to All Items</a>
+        <a class="button-link secondary-link" href="{{ url_for('items.item_detail', barcode=item['barcode']) }}">Back to Item</a>
+        <a class="button-link secondary-link" href="{{ url_for('items.items') }}">Back to All Items</a>
     </div>
 </section>
 {% endblock %}
