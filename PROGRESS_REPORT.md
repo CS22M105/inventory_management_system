@@ -1545,3 +1545,180 @@ Why it was needed:
 ### Current Result
 
 The project is now much closer to cloud deployment. The app still runs locally as before, but it now has production configuration guards, environment documentation, app-side HTTPS/proxy support, WhiteNoise static serving, tuned Gunicorn settings, CI tests with PostgreSQL, a deploy workflow gated by CI, and clear GitHub protection/secrets instructions. The remaining work is mostly provider setup and live-domain verification rather than core application code.
+
+---
+
+## Update: July 10, 2026 — Quality & Operations Readiness (Phase 4, Steps N–Q)
+
+This update records the quality and operations work completed from `design_docx/QUALITY_OPERATIONS_PLAN.md`. The goal of this phase was to make the product safer to change and easier to operate in production: expand regression tests, add observability, expose a health-check endpoint for monitors, and split the large Flask file into a maintainable package structure without changing the working inventory workflows.
+
+### 1. Step N — Expanded automated regression tests
+
+What was changed:
+
+- Added `tests/test_stock.py`.
+- Added `tests/test_permissions.py`.
+- Added `tests/test_exports.py`.
+- Updated `README.md` with a clear "Running Tests" section and test-module coverage table.
+
+Why it was needed:
+
+- The existing test suite covered authentication, migrations, item forms, and transaction pagination, but important workflow gaps remained.
+- Stock add/remove, route permissions, admin/faculty/student access, CSV exports, and non-paginated export behavior are core product workflows and need automated protection before launch.
+
+How it was done:
+
+- Stock tests cover both stock entry points:
+  - `POST /scan`
+  - `POST /items/<barcode>/stock`
+- Stock tests verify add/remove quantity changes, transaction row creation, over-removal rejection, missing lab instructor/topic/notes validation, unknown barcode handling, and stored transaction fields.
+- Permission tests verify student, faculty, and administrator access rules, including:
+  - Students can view inventory/transactions but cannot add/edit items, manage users, access DB status, or export inventory reports.
+  - Faculty can add/edit items and manage students but cannot access DB status.
+  - Administrators can access DB status and reports.
+  - Faculty cannot deactivate/delete faculty or administrator accounts.
+  - The protected administrator account cannot be deactivated/deleted.
+- Export tests verify:
+  - Transaction CSV export.
+  - Filtered transaction CSV export.
+  - Inventory CSV export.
+  - Unauthenticated redirects to login.
+  - Export responses return the full filtered set, not only the visible paginated page.
+
+### 2. Step O — Error monitoring and structured logging
+
+What was changed:
+
+- Added optional Sentry integration with `sentry-sdk[flask]`.
+- Added production JSON request logging and readable local development logs.
+- Added per-request `request_id`.
+- Added `X-Request-ID` response header.
+- Added ERROR logging for unhandled exceptions.
+- Updated `.env.example` and `README.md` with Sentry and observability instructions.
+
+Why it was needed:
+
+- A production product needs visibility into failures after deployment.
+- Operators need request context, status codes, durations, and request IDs to debug live issues.
+- Errors should be grouped and traceable in Sentry when a real `SENTRY_DSN` is configured.
+
+How it was done:
+
+- Sentry initializes only when `SENTRY_DSN` is set, so local development and tests do not make Sentry network calls.
+- `APP_ENV` is passed as the Sentry environment.
+- `send_default_pii=False` is used so the app does not intentionally send user emails or sensitive request data to Sentry.
+- Request logs include:
+  - method
+  - path
+  - status
+  - duration_ms
+  - remote_addr
+  - request_id
+- The app intentionally does not log passwords, session cookies, CSRF tokens, invite/reset token values, request bodies, full database URLs, or SMTP credentials.
+
+### 3. Step P — Health endpoint and uptime-monitoring documentation
+
+What was changed:
+
+- Added unauthenticated `GET /health`.
+- Added `tests/test_health.py`.
+- Updated `README.md` with uptime-monitor setup instructions.
+- Updated `QUALITY_OPERATIONS_PLAN.md` with implementation details for P1 and P2.
+
+Why it was needed:
+
+- `/db-status` is a human admin page and requires login, so it is not suitable for hosting platforms, load balancers, or uptime monitors.
+- Production monitoring needs a fast, safe machine endpoint that returns whether the app and database are reachable.
+
+How it was done:
+
+- `/health` runs a lightweight `SELECT 1`.
+- Healthy response:
+  - HTTP 200
+  - `{"status": "ok", "database": "ok"}`
+- Failed database check response:
+  - HTTP 503
+  - `{"status": "error", "database": "error"}`
+- The endpoint returns no secrets, user data, database URL, row counts, or schema details.
+- README now documents using `https://<domain>/health` with an external monitor, expected interval of 1-5 minutes, expected normal response time under 500 ms, and alerting on non-200 responses or timeouts.
+
+### 4. Step Q — Split `app.py` into a maintainable package structure
+
+What was changed:
+
+- Added `ARCHITECTURE.md`.
+- Added `inventory/` package structure.
+- Moved pure helpers out of `app.py`.
+- Moved route registrations into blueprints.
+- Added a thin compatibility `app.py` entrypoint.
+- Kept existing browser URLs and deployment commands working.
+
+Why it was needed:
+
+- The app had grown into one large file, which becomes risky as more product features are added.
+- A market-facing product needs a structure where auth, items, stock, transactions, reports, admin, observability, configuration, and database concerns are separated.
+- Refactoring before more features are added reduces future breakage.
+
+How it was done:
+
+- Q1 documented the target module layout in `ARCHITECTURE.md`.
+- Q2 extracted pure helpers:
+  - `inventory/auth/passwords.py`
+  - `inventory/auth/tokens.py`
+  - `inventory/items/barcodes.py`
+  - `inventory/items/forms.py`
+  - `inventory/services/email.py`
+  - `inventory/transactions/repository.py`
+  - `inventory/stock/service.py`
+- Q3 moved route registrations into blueprints:
+  - `inventory/auth/routes.py`
+  - `inventory/dashboard/routes.py`
+  - `inventory/items/routes.py`
+  - `inventory/stock/routes.py`
+  - `inventory/transactions/routes.py`
+  - `inventory/reports/routes.py`
+  - `inventory/admin/routes.py`
+- Q4 made `app.py` a thin compatibility entrypoint:
+  - `flask --app app run --debug` still works.
+  - `gunicorn app:app -c gunicorn.conf.py` still works.
+  - `inventory.create_app()` now exists for the long-term application factory direction.
+
+### 5. Verification performed
+
+- `python -m py_compile` passed for the thin entrypoint, package modules, route modules, config, database helpers, observability, and CLI helpers.
+- App import check passed.
+- URL map inspection confirmed 28 non-static routes are registered.
+- Browser URLs were preserved, including:
+  - `/login`
+  - `/dashboard`
+  - `/items`
+  - `/items/new`
+  - `/scan`
+  - `/transactions`
+  - `/reports/export`
+  - `/admin/users`
+  - `/db-status`
+  - `/health`
+- Focused route-area tests passed after the blueprint move.
+- Full PostgreSQL-backed suite passed: **82 passed**.
+- Git working tree was clean after the completed refactor verification.
+
+### 6. What is still left before market launch
+
+- Configure a real hosting provider.
+- Provision managed PostgreSQL with automated backups and point-in-time recovery.
+- Complete a restore drill on a scratch/restored database.
+- Store production secrets in the platform secret store.
+- Configure real SMTP/email delivery.
+- Configure `DEPLOY_HOOK_URL` in GitHub Actions secrets or the GitHub `production` environment.
+- Configure custom domain, TLS, HTTP-to-HTTPS redirect, and final HSTS verification.
+- Set `APP_BASE_URL=https://<domain>` so invite/reset links and QR links use the production domain.
+- Configure Sentry with a real `SENTRY_DSN` and verify a staging event.
+- Configure an external uptime monitor pointed at `/health`.
+- If running multiple Gunicorn workers/hosts, set `RATELIMIT_STORAGE_URI` to a shared store such as Redis.
+- Run the first production smoke test on the live domain.
+- Complete the university/product readiness review items: privacy/FERPA-style handling, accessibility, support process, backup policy, and terms/usage expectations.
+
+### Current Result
+
+The application is now much safer to operate and change. The local product workflows still work, the full automated suite passes with **82 tests**, and the codebase has moved from a single large Flask file to a package structure with blueprints and a thin entrypoint. The remaining launch work is mostly operational: real hosting, managed database backups, production secrets, email delivery, monitoring, and live-domain smoke testing.
