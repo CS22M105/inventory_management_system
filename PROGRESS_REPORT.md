@@ -1782,6 +1782,91 @@ changing the inventory workflows, routes, permissions, or database schema.
 - Python compile check passed.
 - Full automated test suite passed with `pytest -q`.
 
+## Update: July 12, 2026 — University Market Readiness, Step R3 Admin Audit Trail
+
+This update records the admin audit trail step from
+`design_docx/UNIVERSITY_MARKET_READINESS_PLAN.md`. The goal was to make the app
+able to answer who performed sensitive administrative, inventory, stock, report,
+and system actions.
+
+### What was changed
+
+- Added Alembic migration `0006_audit_logs`.
+- Expanded the earlier R2 audit table into `audit_logs`.
+- Updated `schema.sql` so fresh local databases create `audit_logs`.
+- Expanded `log_audit_event()` to snapshot:
+  - actor user ID,
+  - actor email,
+  - actor role,
+  - request ID,
+  - IP address,
+  - user agent.
+- Added audit logging for user administration:
+  - user created,
+  - invite resent,
+  - user deactivated,
+  - user activated,
+  - user deleted.
+- Added audit logging for inventory:
+  - item created,
+  - item updated,
+  - QR label viewed.
+- Added audit logging for stock:
+  - stock added,
+  - stock removed.
+- Kept stock audit logging in the same commit as the stock transaction.
+- Added audit logging for reports:
+  - transaction CSV export,
+  - inventory CSV export.
+- Added audit logging for system status:
+  - database status viewed.
+- Added audit logging for CLI password setting:
+  - password set by CLI.
+- Added a read-only administrator page at `/admin/audit-logs`.
+- Added an administrator-only Audit Logs navigation link.
+- Added `tests/test_audit_logs.py`.
+
+### Why it was needed
+
+- Production systems need reliable accountability.
+- User-management actions can affect access to student-related records.
+- CSV exports can contain sensitive activity and operational data.
+- Stock actions are already recorded as transactions, but audit logs add request
+  context such as request ID, IP address, and user agent.
+- Actor email/role snapshots are stored because users can later be renamed,
+  deactivated, or deleted.
+
+### How it was done
+
+- The app writes append-only audit rows; no edit/delete UI exists for audit logs.
+- Audit rows store metadata, not passwords, tokens, full request bodies, SMTP
+  values, database URLs, or exported CSV contents.
+- The previous R2 `audit_events` migration is preserved for upgrade history, and
+  R3 migration `0006_audit_logs` migrates it forward into the richer
+  `audit_logs` table.
+
+### Verification performed
+
+- Added tests for user create/deactivate/activate/delete audit logs.
+- Added tests for item edit audit logs.
+- Added tests for stock transaction audit logs.
+- Added tests for CSV export audit logs.
+- Added tests for CLI password-set audit logs.
+- Added tests proving students/faculty cannot view `/admin/audit-logs` and
+  administrators can.
+- Migration tests now verify `audit_logs` exists at Alembic head.
+- `git diff --check` passed.
+- Python compile check passed.
+- Targeted audit/export/migration/stock tests passed.
+- Full automated test suite passed with `pytest -q`:
+  - 90 tests passed.
+
+### Remaining audit enhancements
+
+- Add filters to the audit log viewer.
+- Add retention cleanup after university policy confirms the retention period.
+- Add audit-log export only if university policy approves it.
+
 ### Remaining accessibility work
 
 - Complete keyboard-only walkthrough of all critical workflows.
@@ -1801,12 +1886,13 @@ by adding an audit trail for CSV exports.
 
 - Added `PRIVACY_AND_DATA_HANDLING.md`.
 - Added Alembic migration `0005_audit_events`.
-- Added the `audit_events` table to `schema.sql` for local development setup.
+- Added the initial `audit_events` table to `schema.sql` for local development
+  setup. This was later expanded into `audit_logs` during R3.
 - Added a shared `log_audit_event()` helper.
 - Added audit logging for transaction CSV exports.
 - Added audit logging for inventory CSV exports.
 - Updated export tests to confirm audit rows are created.
-- Updated migration tests to confirm `audit_events` exists in the production
+- Updated migration tests to confirm the audit table exists in the production
   migration chain.
 - Updated the university market readiness plan with R2 implementation details.
 
@@ -1822,8 +1908,7 @@ by adding an audit trail for CSV exports.
 
 ### How it was done
 
-- A new `audit_events` table stores metadata about privacy/security-relevant
-  actions.
+- A new audit table stores metadata about privacy/security-relevant actions.
 - CSV contents are not copied into the audit log.
 - The transaction export logs the active filters and exported row count.
 - The inventory export logs the exported row count.

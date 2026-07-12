@@ -1,7 +1,7 @@
 """Stock transaction service helpers."""
 
 
-def process_stock_transaction(db, user_id, barcode, form):
+def process_stock_transaction(db, user_id, barcode, form, audit_callback=None):
     transaction_type = form.get("transaction_type", "").strip()
     lab_instructor = form.get("lab_instructor", "").strip()
     topic_of_day = form.get("topic_of_day", "").strip()
@@ -46,6 +46,8 @@ def process_stock_transaction(db, user_id, barcode, form):
         """,
         (user_id, item["id"], transaction_type, quantity, lab_instructor, topic_of_day, notes),
     )
+    if audit_callback is not None:
+        audit_callback(db, item, transaction_type, quantity, new_quantity)
     db.commit()
     return f"{item['name']} updated successfully. New quantity: {new_quantity}.", None, 200
 

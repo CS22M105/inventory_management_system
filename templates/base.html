@@ -40,6 +40,7 @@
             <a href="{{ url_for('reports.export_inventory') }}">Export CSV</a>
             {% if session.get("user_role") == "administrator" %}
             <a href="{{ url_for('admin.db_status') }}">Database Status</a>
+            <a href="{{ url_for('admin.audit_logs') }}">Audit Logs</a>
             {% endif %}
             {% else %}
             <a href="{{ url_for('dashboard.dashboard') }}">Home</a>

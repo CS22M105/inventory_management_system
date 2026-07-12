@@ -4,7 +4,7 @@
 -- `alembic upgrade head` instead of applying this file. The baseline revision
 -- (migrations/versions/0001_baseline.py) mirrors the CREATE statements below.
 
-DROP TABLE IF EXISTS audit_events;
+DROP TABLE IF EXISTS audit_logs;
 DROP TABLE IF EXISTS transactions;
 DROP TABLE IF EXISTS items;
 DROP TABLE IF EXISTS users;
@@ -55,15 +55,19 @@ CREATE TABLE transactions (
     FOREIGN KEY (item_id) REFERENCES items (id) ON DELETE RESTRICT
 );
 
-CREATE TABLE audit_events (
+CREATE TABLE audit_logs (
     id SERIAL PRIMARY KEY,
     actor_user_id INTEGER,
-    event_type TEXT NOT NULL,
+    actor_email_snapshot TEXT,
+    actor_role_snapshot TEXT,
+    action TEXT NOT NULL,
     target_type TEXT,
     target_id TEXT,
-    details TEXT,
+    target_label TEXT,
     ip_address TEXT,
     request_id TEXT,
+    user_agent TEXT,
+    details_json TEXT,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (actor_user_id) REFERENCES users (id) ON DELETE SET NULL
 );
@@ -76,10 +80,11 @@ CREATE INDEX ix_transactions_transaction_date ON transactions (transaction_date)
 CREATE INDEX ix_transactions_date_time_id
     ON transactions (transaction_date DESC, transaction_time DESC, id DESC);
 CREATE INDEX ix_items_name ON items (name);
-CREATE INDEX ix_audit_events_created_at
-    ON audit_events (created_at DESC, id DESC);
-CREATE INDEX ix_audit_events_actor_user_id ON audit_events (actor_user_id);
-CREATE INDEX ix_audit_events_event_type ON audit_events (event_type);
+CREATE INDEX ix_audit_logs_created_at
+    ON audit_logs (created_at DESC, id DESC);
+CREATE INDEX ix_audit_logs_actor_user_id ON audit_logs (actor_user_id);
+CREATE INDEX ix_audit_logs_action ON audit_logs (action);
+CREATE INDEX ix_audit_logs_target_type ON audit_logs (target_type);
 
 -- Seed users have no password_hash yet (invited state). Set one with:
 --   flask --app app set-password <email> <password>

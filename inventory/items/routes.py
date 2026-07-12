@@ -11,6 +11,7 @@ from inventory.core import (
     generate_next_item_barcode,
     get_db,
     get_item_form_data,
+    log_audit_event,
     require_item_manager,
     require_login,
 )
@@ -137,7 +138,7 @@ def item_label(barcode):
     db = get_db()
     item = db.execute(
         """
-        SELECT barcode, name, room, bin_location, company, expiration_date
+        SELECT id, barcode, name, room, bin_location, company, expiration_date
         FROM items
         WHERE barcode = %s
         """,
@@ -146,6 +147,16 @@ def item_label(barcode):
 
     if item is None:
         abort(404, description="Not recognized")
+
+    log_audit_event(
+        db,
+        "qr_label_viewed",
+        target_type="item",
+        target_id=item["id"],
+        target_label=f"{item['name']} ({item['barcode']})",
+        details={"barcode": item["barcode"]},
+    )
+    db.commit()
 
     return render_template("item_label.html", item=item)
 
@@ -169,13 +180,14 @@ def item_new():
             item_data["barcode"] = generate_next_item_barcode(db)
 
         try:
-            db.execute(
+            new_item = db.execute(
                 """
                 INSERT INTO items (
                     barcode, name, bin_location, room, company,
                     quantity, minimum_quantity, location, expiration_date, notes
                 )
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
                 """,
                 (
                     item_data["barcode"],
@@ -189,6 +201,20 @@ def item_new():
                     item_data["expiration_date"],
                     item_data["notes"],
                 ),
+            ).fetchone()
+            log_audit_event(
+                db,
+                "item_created",
+                target_type="item",
+                target_id=new_item["id"],
+                target_label=f"{item_data['name']} ({item_data['barcode']})",
+                details={
+                    "barcode": item_data["barcode"],
+                    "room": item_data["room"],
+                    "bin_location": item_data["bin_location"],
+                    "quantity": item_data["quantity"],
+                    "minimum_quantity": item_data["minimum_quantity"],
+                },
             )
             db.commit()
         except psycopg2.IntegrityError:
@@ -243,6 +269,23 @@ def item_edit(item_id):
             return render_template("item_edit.html", error=error, item=item_data), 400
 
         try:
+            changed_fields = []
+            for field in (
+                "barcode",
+                "name",
+                "bin_location",
+                "room",
+                "company",
+                "quantity",
+                "minimum_quantity",
+                "location",
+                "expiration_date",
+            ):
+                if item[field] != item_data[field]:
+                    changed_fields.append(field)
+            if (item["notes"] or "") != (item_data["notes"] or ""):
+                changed_fields.append("notes")
+
             db.execute(
                 """
                 UPDATE items
@@ -272,6 +315,14 @@ def item_edit(item_id):
                     item_data["notes"],
                     item_id,
                 ),
+            )
+            log_audit_event(
+                db,
+                "item_updated",
+                target_type="item",
+                target_id=item_id,
+                target_label=f"{item_data['name']} ({item_data['barcode']})",
+                details={"changed_fields": changed_fields},
             )
             db.commit()
         except psycopg2.IntegrityError:

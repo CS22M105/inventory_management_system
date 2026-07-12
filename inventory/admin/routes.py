@@ -8,6 +8,7 @@ from inventory.core import (
     app,
     can_manage_user_role,
     get_db,
+    log_audit_event,
     require_admin,
     require_sudo,
     require_system_admin,
@@ -93,6 +94,18 @@ def admin_user_new():
                 """,
                 (institution_id or None, email, name, role, department),
             ).fetchone()
+            log_audit_event(
+                db,
+                "user_created",
+                target_type="user",
+                target_id=new_user["id"],
+                target_label=email,
+                details={
+                    "created_role": role,
+                    "department": department,
+                    "has_institution_id": bool(institution_id),
+                },
+            )
             db.commit()
         except psycopg2.IntegrityError:
             db.rollback()
@@ -160,6 +173,16 @@ def admin_user_resend_invite(user_id):
                 "warning",
             )
 
+    log_audit_event(
+        db,
+        "invite_resent",
+        target_type="user",
+        target_id=user["id"],
+        target_label=user["email"],
+        details={"email_sent": bool(invite["sent"]) if "invite" in locals() else False},
+    )
+    db.commit()
+
     return redirect(url_for("admin.admin_users"))
 
 
@@ -180,7 +203,7 @@ def admin_user_deactivate(user_id):
     db = get_db()
     user = db.execute(
         """
-        SELECT id, role
+        SELECT id, email, role, name
         FROM users
         WHERE id = %s
         """,
@@ -198,6 +221,14 @@ def admin_user_deactivate(user_id):
         """,
         (user_id,),
     )
+    log_audit_event(
+        db,
+        "user_deactivated",
+        target_type="user",
+        target_id=user["id"],
+        target_label=user["email"],
+        details={"target_role": user["role"], "target_name": user["name"]},
+    )
     db.commit()
 
     return redirect(url_for("admin.admin_users"))
@@ -213,7 +244,7 @@ def admin_user_activate(user_id):
     db = get_db()
     user = db.execute(
         """
-        SELECT id, role
+        SELECT id, email, role, name
         FROM users
         WHERE id = %s
         """,
@@ -230,6 +261,14 @@ def admin_user_activate(user_id):
         WHERE id = %s
         """,
         (user_id,),
+    )
+    log_audit_event(
+        db,
+        "user_activated",
+        target_type="user",
+        target_id=user["id"],
+        target_label=user["email"],
+        details={"target_role": user["role"], "target_name": user["name"]},
     )
     db.commit()
 
@@ -253,7 +292,7 @@ def admin_user_delete(user_id):
     db = get_db()
     user = db.execute(
         """
-        SELECT id, role, is_active
+        SELECT id, email, role, name, is_active
         FROM users
         WHERE id = %s
         """,
@@ -282,6 +321,14 @@ def admin_user_delete(user_id):
         """,
         (user_id,),
     )
+    log_audit_event(
+        db,
+        "user_deleted",
+        target_type="user",
+        target_id=user["id"],
+        target_label=user["email"],
+        details={"target_role": user["role"], "target_name": user["name"]},
+    )
     db.commit()
 
     return redirect(url_for("admin.admin_users"))
@@ -298,6 +345,18 @@ def db_status():
     user_count = db.execute("SELECT COUNT(*) AS total FROM users").fetchone()["total"]
     item_count = db.execute("SELECT COUNT(*) AS total FROM items").fetchone()["total"]
     transaction_count = db.execute("SELECT COUNT(*) AS total FROM transactions").fetchone()["total"]
+    log_audit_event(
+        db,
+        "db_status_viewed",
+        target_type="system",
+        target_label="Database Status",
+        details={
+            "user_count": user_count,
+            "item_count": item_count,
+            "transaction_count": transaction_count,
+        },
+    )
+    db.commit()
 
     return render_template(
         "db_status.html",
@@ -305,3 +364,35 @@ def db_status():
         item_count=item_count,
         transaction_count=transaction_count,
     )
+
+
+@bp.route("/admin/audit-logs")
+def audit_logs():
+    admin_redirect = require_system_admin()
+
+    if admin_redirect is not None:
+        return admin_redirect
+
+    db = get_db()
+    rows = db.execute(
+        """
+        SELECT
+            id,
+            actor_email_snapshot,
+            actor_role_snapshot,
+            action,
+            target_type,
+            target_id,
+            target_label,
+            request_id,
+            ip_address,
+            user_agent,
+            details_json,
+            TO_CHAR(created_at, 'YYYY-MM-DD HH24:MI:SS') AS created_at
+        FROM audit_logs
+        ORDER BY created_at DESC, id DESC
+        LIMIT 100
+        """
+    ).fetchall()
+
+    return render_template("audit_logs.html", audit_logs=rows)

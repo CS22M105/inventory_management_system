@@ -417,7 +417,8 @@ What was implemented:
         - vendor review summary,
         - stakeholder decision list.
     - Added an audit_events table through Alembic migration 0005.
-    - Mirrored the audit_events table in schema.sql for local/dev bootstrap.
+    - Mirrored the initial audit_events table in schema.sql for local/dev
+      bootstrap. R3 later expands this into audit_logs.
     - Added indexes for audit event timestamp, actor user, and event type.
     - Added a shared log_audit_event() helper.
     - Added audit events when transaction CSV exports are downloaded.
@@ -426,7 +427,8 @@ What was implemented:
       address, actor user id, and timestamp.
     - Audit details do NOT store exported CSV contents.
     - Added regression tests proving export audit rows are created.
-    - Updated migration tests so the production schema must include audit_events.
+    - Updated migration tests so the production schema must include the audit
+      table.
 
 Why:
     CSV exports can contain user activity, dates, times, lab instructors, topics,
@@ -444,8 +446,8 @@ How:
 
 Verification completed:
     - Export regression tests now assert transaction and inventory exports create
-      audit_events rows.
-    - Migration tests now assert audit_events exists at Alembic head.
+      audit rows.
+    - Migration tests now assert the audit table exists at Alembic head.
     - py_compile passed.
     - pytest -q passed.
 
@@ -548,6 +550,102 @@ Tests:
     - CSV export creates audit log
     - students cannot view audit logs
     - faculty/admin access follows policy
+```
+
+Implementation details - July 12, 2026:
+
+```text
+Status: COMPLETE FOR INITIAL PRODUCTION AUDIT TRAIL; advanced filtering/export
+        of audit logs can be added later.
+
+Files changed:
+    migrations/versions/0006_audit_logs.py              (new)
+    templates/audit_logs.html                           (new)
+    inventory/core.py
+    inventory/admin/routes.py
+    inventory/items/routes.py
+    inventory/stock/service.py
+    inventory/cli.py
+    inventory/reports/routes.py
+    inventory/transactions/routes.py
+    templates/base.html
+    schema.sql
+    tests/conftest.py
+    tests/test_audit_logs.py                            (new)
+    tests/test_exports.py
+    tests/test_migrations.py
+    PRIVACY_AND_DATA_HANDLING.md
+    PROGRESS_REPORT.md
+    design_docx/UNIVERSITY_MARKET_READINESS_PLAN.md
+
+What was implemented:
+    - Added migration 0006_audit_logs.
+    - Migrated R2's audit_events table into the richer audit_logs table.
+    - audit_logs stores:
+        - actor_user_id,
+        - actor_email_snapshot,
+        - actor_role_snapshot,
+        - action,
+        - target_type,
+        - target_id,
+        - target_label,
+        - request_id,
+        - ip_address,
+        - user_agent,
+        - details_json,
+        - created_at.
+    - Added indexes for created_at, actor_user_id, action, and target_type.
+    - Updated schema.sql so local dev bootstrap creates audit_logs directly.
+    - Expanded log_audit_event() to snapshot actor email/role and request
+      context.
+    - Added audit logging for:
+        - user_created,
+        - invite_resent,
+        - user_deactivated,
+        - user_activated,
+        - user_deleted,
+        - password_set_by_cli,
+        - item_created,
+        - item_updated,
+        - qr_label_viewed,
+        - stock_added,
+        - stock_removed,
+        - transactions_csv_exported,
+        - inventory_csv_exported,
+        - db_status_viewed.
+    - Added a read-only /admin/audit-logs page.
+    - Added an Audit Logs navigation link for administrators only.
+    - Kept audit logs append-only from the app UI; no edit/delete route exists.
+
+Why:
+    Production university systems need to answer who performed sensitive
+    actions, when they happened, where the request came from, and what record was
+    affected. This is especially important for user administration, exports,
+    inventory edits, and stock movement.
+
+How:
+    The implementation logs metadata, not full request bodies. It avoids
+    passwords, invite/reset tokens, CSRF tokens, SMTP credentials, DATABASE_URL,
+    and CSV contents. For stock actions, the audit row is written in the same
+    commit as the transaction update so the transaction and audit context stay
+    together.
+
+Verification completed:
+    - Tests cover user create/deactivate/activate/delete audit logging.
+    - Tests cover item edit audit logging.
+    - Tests cover stock transaction plus audit logging.
+    - Tests cover CSV export audit logging.
+    - Tests cover CLI set-password audit logging.
+    - Tests cover audit log viewer access: administrator allowed, faculty and
+      student redirected.
+    - Migration tests assert audit_logs exists at Alembic head.
+    - py_compile passed.
+    - pytest -q passed with 90 tests.
+
+Remaining possible enhancements:
+    - Add date/action/actor filters to /admin/audit-logs.
+    - Add audit log CSV export if university policy approves.
+    - Add retention cleanup job after university retention policy is confirmed.
 ```
 
 ---

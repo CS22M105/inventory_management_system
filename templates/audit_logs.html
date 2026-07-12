@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}Audit Logs{% endblock %}
+
+{% block content %}
+<section>
+    <h2>Audit Logs</h2>
+    <p class="page-intro">Most recent audit events are shown first.</p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Created</th>
+                <th>Actor</th>
+                <th>Role</th>
+                <th>Action</th>
+                <th>Target</th>
+                <th>Request</th>
+                <th>IP</th>
+                <th>Details</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for entry in audit_logs %}
+            <tr>
+                <td>{{ entry.created_at }}</td>
+                <td>{{ entry.actor_email_snapshot or "System/CLI" }}</td>
+                <td>{{ entry.actor_role_snapshot or "-" }}</td>
+                <td>{{ entry.action }}</td>
+                <td>
+                    {{ entry.target_type or "-" }}
+                    {% if entry.target_label %}
+                    <br>{{ entry.target_label }}
+                    {% elif entry.target_id %}
+                    <br>{{ entry.target_id }}
+                    {% endif %}
+                </td>
+                <td>{{ entry.request_id or "-" }}</td>
+                <td>{{ entry.ip_address or "-" }}</td>
+                <td><code>{{ entry.details_json or "{}" }}</code></td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="8">No audit logs recorded yet.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+{% endblock %}

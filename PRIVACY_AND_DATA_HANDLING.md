@@ -80,18 +80,20 @@ following rules apply:
    have been entered.
 ```
 
-The app now records export audit events in `audit_events`. Each export event
+The app records export audit events in `audit_logs`. Each export event
 records:
 
 ```text
 - acting user ID
-- event type
+- action
 - target type
+- actor email/role snapshot
 - row count
 - filters applied, if any
 - request path
 - request IP address
 - request ID, when available
+- user agent, when available
 - timestamp
 ```
 
@@ -106,7 +108,7 @@ Retention must be approved by the university. Recommended starting point:
 | User accounts | Keep while active; deactivate instead of deleting when historical accountability is needed | Transactions reference users |
 | Inventory records | Keep while item is active; archive/delete only after operational review | Inventory continuity |
 | Transaction records | 3-7 years, or university policy | Accountability, audit, lab operations |
-| Export audit events | 1-3 years, or university security policy | Detect misuse and answer audit questions |
+| Audit logs | 1-3 years, or university security policy | Detect misuse and answer audit questions |
 | Application logs | 30-90 days unless needed for an incident | Operational troubleshooting |
 | Error monitoring events | 30-90 days unless needed for an incident | Production debugging |
 
@@ -153,7 +155,7 @@ Before production launch, the university must confirm:
 - who may export transaction CSV files
 - whether notes need stricter validation or guidance
 - transaction retention period
-- audit event retention period
+- audit log retention period
 - approved storage location for downloaded CSV files
 - privacy notice wording
 ```

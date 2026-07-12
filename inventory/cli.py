@@ -136,13 +136,28 @@ def register_cli(flask_app):
         if error:
             raise click.ClickException(error)
 
-        cursor = db.execute(
+        user = db.execute(
+            "SELECT id, email, role FROM users WHERE email = %s",
+            (email,),
+        ).fetchone()
+
+        if user is None:
+            raise click.ClickException(f"No user found with email {email}.")
+
+        db.execute(
             "UPDATE users SET password_hash = %s WHERE email = %s",
             (core.hash_password(password), email),
         )
+        core.log_audit_event(
+            db,
+            "password_set_by_cli",
+            target_type="user",
+            target_id=user["id"],
+            target_label=user["email"],
+            actor_email_snapshot="cli",
+            actor_role_snapshot="operator",
+            details={"target_role": user["role"]},
+        )
         db.commit()
-
-        if cursor.rowcount == 0:
-            raise click.ClickException(f"No user found with email {email}.")
 
         click.echo(f"Password set for {email}.")

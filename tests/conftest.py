@@ -134,7 +134,7 @@ def users(_create_test_database):
     with app_module.app.app_context():
         db = app_module.get_db()
         db.execute(
-            "TRUNCATE audit_events, transactions, items, users "
+            "TRUNCATE audit_logs, transactions, items, users "
             "RESTART IDENTITY CASCADE"
         )
         for key, (email, role, active, password) in seed.items():

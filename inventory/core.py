@@ -4,7 +4,17 @@ from datetime import timedelta
 import json
 import time
 
-from flask import Flask, g, got_request_exception, redirect, render_template, request, session, url_for
+from flask import (
+    Flask,
+    g,
+    got_request_exception,
+    has_request_context,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_wtf.csrf import CSRFError, CSRFProtect
@@ -346,7 +356,28 @@ def get_item_form_data(require_barcode=True):
 
 
 def process_stock_transaction(barcode, form):
-    return stock_process_stock_transaction(get_db(), session["user_id"], barcode, form)
+    def audit_stock_change(db, item, transaction_type, quantity, new_quantity):
+        action = "stock_added" if transaction_type == "add" else "stock_removed"
+        log_audit_event(
+            db,
+            action,
+            target_type="item",
+            target_id=item["id"],
+            target_label=f"{item['name']} ({barcode})",
+            details={
+                "barcode": barcode,
+                "quantity": quantity,
+                "new_quantity": new_quantity,
+            },
+        )
+
+    return stock_process_stock_transaction(
+        get_db(),
+        session["user_id"],
+        barcode,
+        form,
+        audit_callback=audit_stock_change,
+    )
 
 
 def get_stock_item(db, barcode):
@@ -381,13 +412,39 @@ def get_transaction_filter_options(db):
     return transaction_filter_options(db)
 
 
-def log_audit_event(db, event_type, target_type=None, target_id=None, details=None):
-    """Record privacy/security-relevant metadata without storing exported data."""
-    actor_user_id = session.get("user_id")
-    request_id = getattr(g, "request_id", None)
-    remote_addr = request.headers.get("X-Forwarded-For", request.remote_addr)
-    if remote_addr and "," in remote_addr:
-        remote_addr = remote_addr.split(",", 1)[0].strip()
+def log_audit_event(
+    db,
+    action,
+    target_type=None,
+    target_id=None,
+    target_label=None,
+    details=None,
+    actor_user_id=None,
+    actor_email_snapshot=None,
+    actor_role_snapshot=None,
+):
+    """Record append-only audit metadata without storing secrets or form bodies."""
+    request_id = None
+    remote_addr = None
+    user_agent = None
+
+    if has_request_context():
+        if actor_user_id is None:
+            actor_user_id = session.get("user_id")
+        request_id = getattr(g, "request_id", None)
+        remote_addr = request.headers.get("X-Forwarded-For", request.remote_addr)
+        if remote_addr and "," in remote_addr:
+            remote_addr = remote_addr.split(",", 1)[0].strip()
+        user_agent = request.headers.get("User-Agent")
+
+    if actor_user_id and (not actor_email_snapshot or not actor_role_snapshot):
+        actor = db.execute(
+            "SELECT email, role FROM users WHERE id = %s",
+            (actor_user_id,),
+        ).fetchone()
+        if actor is not None:
+            actor_email_snapshot = actor_email_snapshot or actor["email"]
+            actor_role_snapshot = actor_role_snapshot or actor["role"]
 
     serialized_details = None
     if details is not None:
@@ -395,25 +452,33 @@ def log_audit_event(db, event_type, target_type=None, target_id=None, details=No
 
     db.execute(
         """
-        INSERT INTO audit_events (
+        INSERT INTO audit_logs (
             actor_user_id,
-            event_type,
+            actor_email_snapshot,
+            actor_role_snapshot,
+            action,
             target_type,
             target_id,
-            details,
+            target_label,
             ip_address,
-            request_id
+            request_id,
+            user_agent,
+            details_json
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """,
         (
             actor_user_id,
-            event_type,
+            actor_email_snapshot,
+            actor_role_snapshot,
+            action,
             target_type,
-            target_id,
-            serialized_details,
+            str(target_id) if target_id is not None else None,
+            target_label,
             remote_addr,
             request_id,
+            user_agent,
+            serialized_details,
         ),
     )
 

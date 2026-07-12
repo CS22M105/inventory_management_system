@@ -119,24 +119,27 @@ def _seed_items_and_transactions(user_id, total_transactions=60):
         return item_ids
 
 
-def _latest_audit_event(event_type):
+def _latest_audit_log(action):
     with app_module.app.app_context():
         db = app_module.get_db()
         return db.execute(
             """
             SELECT
                 actor_user_id,
-                event_type,
+                actor_email_snapshot,
+                actor_role_snapshot,
+                action,
                 target_type,
-                details,
+                target_label,
+                details_json,
                 ip_address,
                 request_id
-            FROM audit_events
-            WHERE event_type = %s
+            FROM audit_logs
+            WHERE action = %s
             ORDER BY created_at DESC, id DESC
             LIMIT 1
             """,
-            (event_type,),
+            (action,),
         ).fetchone()
 
 
@@ -156,10 +159,12 @@ def test_transactions_export_returns_full_csv(client, users, login):
     assert len(rows) == 61
     assert {row[4] for row in rows[1:]} == {"EXP-A", "EXP-B"}
 
-    audit = _latest_audit_event("transactions_csv_exported")
+    audit = _latest_audit_log("transactions_csv_exported")
     assert audit["actor_user_id"] == users["faculty"]["id"]
+    assert audit["actor_email_snapshot"] == users["faculty"]["email"]
+    assert audit["actor_role_snapshot"] == "faculty"
     assert audit["target_type"] == "transactions"
-    details = json.loads(audit["details"])
+    details = json.loads(audit["details_json"])
     assert details["row_count"] == 60
     assert details["filters"] == {}
     assert details["path"] == "/transactions/export"
@@ -184,8 +189,8 @@ def test_transactions_export_item_filter_returns_only_matching_rows(
     assert len(rows) == 31
     assert {row[4] for row in rows[1:]} == {"EXP-A"}
 
-    audit = _latest_audit_event("transactions_csv_exported")
-    details = json.loads(audit["details"])
+    audit = _latest_audit_log("transactions_csv_exported")
+    details = json.loads(audit["details_json"])
     assert details["row_count"] == 30
     assert details["filters"] == {"item_id": str(item_ids[0])}
 
@@ -206,10 +211,12 @@ def test_inventory_export_returns_csv_columns_and_rows(client, users, login):
     assert {row[0] for row in rows[1:]} == {"EXP-A", "EXP-B"}
     assert {row[4] for row in rows[1:]} == {"Export Vendor"}
 
-    audit = _latest_audit_event("inventory_csv_exported")
+    audit = _latest_audit_log("inventory_csv_exported")
     assert audit["actor_user_id"] == users["admin"]["id"]
+    assert audit["actor_email_snapshot"] == users["admin"]["email"]
+    assert audit["actor_role_snapshot"] == "administrator"
     assert audit["target_type"] == "inventory"
-    details = json.loads(audit["details"])
+    details = json.loads(audit["details_json"])
     assert details["row_count"] == 2
     assert details["path"] == "/reports/export"
 
