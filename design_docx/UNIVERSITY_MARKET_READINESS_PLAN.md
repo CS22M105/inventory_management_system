@@ -224,6 +224,69 @@ Accessibility test checklist in README or design_docx
 Open list of any known limitations
 ```
 
+Implementation details - July 10, 2026:
+
+```text
+Status: PARTIAL / CODE AND DOCS COMPLETE; manual assistive-technology audit pending.
+
+Files changed:
+    ACCESSIBILITY_STATEMENT.md                         (new)
+    design_docx/ACCESSIBILITY_TEST_CHECKLIST.md        (new)
+    templates/base.html
+    templates/dashboard.html
+    templates/scan.html
+    templates/login.html
+    templates/item_new.html
+    templates/item_edit.html
+    templates/item_stock.html
+    templates/user_new.html
+    templates/reset_password.html
+    templates/set_password.html
+    templates/reauth.html
+    templates/rate_limited.html
+    static/css/styles.css
+    static/css/styles.css.gz
+    PROGRESS_REPORT.md
+
+What was implemented:
+    - Kept main/header landmarks and a primary navigation label.
+    - Added stronger visible focus states for links, buttons, dropdown summaries,
+      and form fields.
+    - Added reusable screen-reader-only and required-note styles.
+    - Added live/alert roles for server-rendered errors and success/status
+      messages.
+    - Improved dashboard camera scanner semantics with a named region, live
+      status text, aria-controls, and aria-expanded state.
+    - Improved manual scan validation so missing required fields are announced
+      through an alert and fields receive aria-invalid while highlighted.
+    - Added clearer required-field notes to critical forms.
+    - Made the login form use url_for() and marked the login error dialog as
+      modal.
+    - Added ACCESSIBILITY_STATEMENT.md with known limitations.
+    - Added design_docx/ACCESSIBILITY_TEST_CHECKLIST.md for manual, screen-reader,
+      mobile, keyboard, and automated axe-style testing.
+
+Why:
+    Universities need accessible software for students, faculty, staff, and
+    administrators. These changes reduce keyboard/screen-reader friction and
+    create the documentation needed before a campus pilot.
+
+How:
+    The implementation focused on app-owned HTML/CSS/JS without changing route
+    behavior, database schema, permissions, or business workflows.
+
+Verification completed:
+    git diff --check -> clean.
+    python -m py_compile app.py inventory modules -> clean.
+    pytest -q -> green.
+
+Remaining verification:
+    - Keyboard-only walkthrough of every critical workflow.
+    - VoiceOver or NVDA test.
+    - Mobile layout and mobile screen-reader test.
+    - Automated browser accessibility scan such as axe DevTools.
+```
+
 ---
 
 ## Step R2 - FERPA-Aware Privacy and Data Classification
@@ -322,6 +385,76 @@ University stakeholder confirms:
     - Who may see transaction history.
     - Who may export CSV.
     - How long transaction records must be retained.
+```
+
+Implementation details - July 12, 2026:
+
+```text
+Status: PARTIAL / PRODUCT SAFEGUARDS AND DOCS COMPLETE; university policy
+        confirmation still required.
+
+Files changed:
+    PRIVACY_AND_DATA_HANDLING.md                         (new)
+    migrations/versions/0005_audit_events.py             (new)
+    schema.sql
+    inventory/core.py
+    inventory/transactions/routes.py
+    inventory/reports/routes.py
+    tests/conftest.py
+    tests/test_exports.py
+    tests/test_migrations.py
+    PROGRESS_REPORT.md
+    design_docx/UNIVERSITY_MARKET_READINESS_PLAN.md
+
+What was implemented:
+    - Added PRIVACY_AND_DATA_HANDLING.md with:
+        - data minimization rules,
+        - data inventory table,
+        - role-based access summary,
+        - export policy,
+        - retention policy,
+        - privacy notice draft,
+        - vendor review summary,
+        - stakeholder decision list.
+    - Added an audit_events table through Alembic migration 0005.
+    - Mirrored the audit_events table in schema.sql for local/dev bootstrap.
+    - Added indexes for audit event timestamp, actor user, and event type.
+    - Added a shared log_audit_event() helper.
+    - Added audit events when transaction CSV exports are downloaded.
+    - Added audit events when inventory CSV exports are downloaded.
+    - Audit details include row count, filters, request path, request id, IP
+      address, actor user id, and timestamp.
+    - Audit details do NOT store exported CSV contents.
+    - Added regression tests proving export audit rows are created.
+    - Updated migration tests so the production schema must include audit_events.
+
+Why:
+    CSV exports can contain user activity, dates, times, lab instructors, topics,
+    and notes. In a university environment, those records may be sensitive
+    student-related records. Exporting them should therefore leave an audit trail
+    that answers who exported what kind of data and when, without duplicating the
+    exported data itself.
+
+How:
+    The implementation intentionally did not change existing role permissions or
+    routes. It added a metadata-only audit table and logged the two existing CSV
+    export actions under the current access rules. Policy decisions such as
+    whether students may view transaction history are documented as stakeholder
+    confirmations instead of being silently changed in code.
+
+Verification completed:
+    - Export regression tests now assert transaction and inventory exports create
+      audit_events rows.
+    - Migration tests now assert audit_events exists at Alembic head.
+    - py_compile passed.
+    - pytest -q passed.
+
+Remaining verification / decisions:
+    - University confirms which fields are allowed.
+    - University confirms who may see transaction history.
+    - University confirms who may export transaction CSV files.
+    - University confirms retention for transactions, exports, and audit events.
+    - University confirms final privacy notice wording.
 ```
 
 ---

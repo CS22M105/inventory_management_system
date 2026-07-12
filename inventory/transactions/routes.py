@@ -12,6 +12,7 @@ from inventory.core import (
     get_transaction_filter_options,
     get_transaction_filters,
     get_transaction_rows,
+    log_audit_event,
     require_login,
 )
 
@@ -87,7 +88,8 @@ def export_transactions():
         return login_redirect
 
     db = get_db()
-    transaction_rows = get_transaction_rows(db, get_transaction_filters())
+    filters = get_transaction_filters()
+    transaction_rows = get_transaction_rows(db, filters)
 
     output = io.StringIO()
     writer = csv.writer(output)
@@ -121,6 +123,19 @@ def export_transactions():
                 transaction["notes"],
             ]
         )
+
+    active_filters = {key: value for key, value in filters.items() if value}
+    log_audit_event(
+        db,
+        "transactions_csv_exported",
+        target_type="transactions",
+        details={
+            "row_count": len(transaction_rows),
+            "filters": active_filters,
+            "path": request.path,
+        },
+    )
+    db.commit()
 
     return Response(
         output.getvalue(),

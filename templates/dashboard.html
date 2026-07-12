@@ -7,20 +7,20 @@
     <h2>Dashboard</h2>
     <p>Overview of the nursing inventory system.</p>
 
-    <div class="camera-scan-panel">
+    <div class="camera-scan-panel" aria-labelledby="camera-scan-title">
         <div class="page-header scan-panel-header">
             <div>
-                <h3>Camera QR Scan</h3>
+                <h3 id="camera-scan-title">Camera QR Scan</h3>
                 <p>Scan a printed item QR code from the dashboard.</p>
             </div>
             <div class="action-group">
-                <button type="button" id="start-camera-scan">Start Camera</button>
-                <button type="button" id="stop-camera-scan" class="secondary-button" disabled>Stop Camera</button>
+                <button type="button" id="start-camera-scan" aria-controls="camera-reader" aria-expanded="false">Start Camera</button>
+                <button type="button" id="stop-camera-scan" class="secondary-button" aria-controls="camera-reader" disabled>Stop Camera</button>
             </div>
         </div>
 
-        <div id="camera-reader" class="camera-reader" hidden></div>
-        <p id="camera-scan-status" class="scan-status">Camera scanner is ready.</p>
+        <div id="camera-reader" class="camera-reader" role="region" aria-label="Camera QR scanner preview" hidden></div>
+        <p id="camera-scan-status" class="scan-status" role="status" aria-live="polite">Camera scanner is ready.</p>
     </div>
 
     <div class="dashboard-grid">
@@ -142,6 +142,7 @@
                     qrScanner = null;
                     cameraReader.hidden = true;
                     startButton.disabled = false;
+                    startButton.setAttribute("aria-expanded", "false");
                     stopButton.disabled = true;
                     window.location.href = getStockUrl(barcode);
                 });
@@ -164,6 +165,7 @@
             cameraReader.hidden = false;
             qrScanner = new Html5Qrcode("camera-reader");
             startButton.disabled = true;
+            startButton.setAttribute("aria-expanded", "true");
             stopButton.disabled = false;
             setScannerStatus("Starting camera...", false);
 
@@ -180,6 +182,7 @@
                 qrScanner = null;
                 cameraReader.hidden = true;
                 startButton.disabled = false;
+                startButton.setAttribute("aria-expanded", "false");
                 stopButton.disabled = true;
                 setScannerStatus("Camera could not start. Check browser permission or use Items > Scan Item for manual entry.", true);
                 console.error(error);
@@ -197,6 +200,7 @@
                 scanLocked = false;
                 cameraReader.hidden = true;
                 startButton.disabled = false;
+                startButton.setAttribute("aria-expanded", "false");
                 stopButton.disabled = true;
                 setScannerStatus("Camera scanner stopped.", false);
             }).catch(function (error) {

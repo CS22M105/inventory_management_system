@@ -4,6 +4,7 @@
 -- `alembic upgrade head` instead of applying this file. The baseline revision
 -- (migrations/versions/0001_baseline.py) mirrors the CREATE statements below.
 
+DROP TABLE IF EXISTS audit_events;
 DROP TABLE IF EXISTS transactions;
 DROP TABLE IF EXISTS items;
 DROP TABLE IF EXISTS users;
@@ -54,6 +55,19 @@ CREATE TABLE transactions (
     FOREIGN KEY (item_id) REFERENCES items (id) ON DELETE RESTRICT
 );
 
+CREATE TABLE audit_events (
+    id SERIAL PRIMARY KEY,
+    actor_user_id INTEGER,
+    event_type TEXT NOT NULL,
+    target_type TEXT,
+    target_id TEXT,
+    details TEXT,
+    ip_address TEXT,
+    request_id TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (actor_user_id) REFERENCES users (id) ON DELETE SET NULL
+);
+
 -- Performance indexes (mirror migration 0004_transaction_indexes). Support the
 -- /transactions list ORDER BY and its item/user/date filters, plus items sort.
 CREATE INDEX ix_transactions_item_id ON transactions (item_id);
@@ -62,6 +76,10 @@ CREATE INDEX ix_transactions_transaction_date ON transactions (transaction_date)
 CREATE INDEX ix_transactions_date_time_id
     ON transactions (transaction_date DESC, transaction_time DESC, id DESC);
 CREATE INDEX ix_items_name ON items (name);
+CREATE INDEX ix_audit_events_created_at
+    ON audit_events (created_at DESC, id DESC);
+CREATE INDEX ix_audit_events_actor_user_id ON audit_events (actor_user_id);
+CREATE INDEX ix_audit_events_event_type ON audit_events (event_type);
 
 -- Seed users have no password_hash yet (invited state). Set one with:
 --   flask --app app set-password <email> <password>

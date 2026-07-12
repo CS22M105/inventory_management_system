@@ -8,6 +8,26 @@ body {
     min-height: 100vh;
 }
 
+.sr-only {
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    padding: 0;
+    position: absolute;
+    white-space: nowrap;
+    width: 1px;
+}
+
+a:focus-visible,
+button:focus-visible,
+summary:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+    outline: 3px solid #1d4ed8;
+    outline-offset: 3px;
+}
+
 header {
     background: rgba(255, 255, 255, 0.94);
     border-bottom: 1px solid rgba(153, 27, 27, 0.16);
@@ -65,6 +85,12 @@ nav a,
 nav a:hover,
 .nav-dropdown summary:hover {
     background: #7f1d1d;
+}
+
+nav a:focus-visible,
+.nav-dropdown summary:focus-visible,
+.nav-logout-form button:focus-visible {
+    box-shadow: 0 0 0 4px rgba(29, 78, 216, 0.28);
 }
 
 .nav-logout-form {
@@ -410,7 +436,6 @@ input:focus,
 select:focus,
 textarea:focus {
     border-color: #991b1b;
-    outline: 3px solid rgba(153, 27, 27, 0.16);
 }
 
 .password-input-group {
@@ -498,6 +523,11 @@ button:hover {
     background: #7f1d1d;
 }
 
+button:disabled {
+    cursor: not-allowed;
+    opacity: 0.65;
+}
+
 .secondary-button {
     background: #52606d;
 }
@@ -557,6 +587,12 @@ th {
     border-radius: 6px;
     color: #991b1b;
     padding: 10px 12px;
+}
+
+.required-note {
+    color: #52606d;
+    font-size: 0.95rem;
+    font-weight: 700;
 }
 
 .success-message {

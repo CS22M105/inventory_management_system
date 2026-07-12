@@ -133,7 +133,10 @@ def users(_create_test_database):
     result = {}
     with app_module.app.app_context():
         db = app_module.get_db()
-        db.execute("TRUNCATE transactions, items, users RESTART IDENTITY CASCADE")
+        db.execute(
+            "TRUNCATE audit_events, transactions, items, users "
+            "RESTART IDENTITY CASCADE"
+        )
         for key, (email, role, active, password) in seed.items():
             password_hash = app_module.hash_password(password) if password else None
             row = db.execute(

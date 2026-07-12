@@ -8,7 +8,7 @@
     {% block extra_css %}{% endblock %}
 </head>
 <body>
-    <header>
+    <header role="banner">
         <div class="brand-header">
             <img
                 class="brand-logo"
@@ -23,7 +23,7 @@
 
         {% block navigation %}
         {% if session.get("user_id") %}
-        <nav>
+        <nav aria-label="Primary navigation">
             {% if session.get("user_role") in ["administrator", "faculty"] %}
             <a href="{{ url_for('dashboard.dashboard') }}">Home</a>
             <a href="{{ url_for('admin.admin_users') }}">Manage Users</a>
@@ -62,7 +62,7 @@
         {% endblock %}
     </header>
 
-    <main>
+    <main id="main-content">
         {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
         <div class="flash-messages" role="status" aria-live="polite">

@@ -1,9 +1,10 @@
 """Core Flask application assembly and shared route helpers."""
 
 from datetime import timedelta
+import json
 import time
 
-from flask import Flask, got_request_exception, redirect, render_template, request, session, url_for
+from flask import Flask, g, got_request_exception, redirect, render_template, request, session, url_for
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_wtf.csrf import CSRFError, CSRFProtect
@@ -378,6 +379,43 @@ def get_transaction_rows(db, filters, limit=None, offset=None):
 
 def get_transaction_filter_options(db):
     return transaction_filter_options(db)
+
+
+def log_audit_event(db, event_type, target_type=None, target_id=None, details=None):
+    """Record privacy/security-relevant metadata without storing exported data."""
+    actor_user_id = session.get("user_id")
+    request_id = getattr(g, "request_id", None)
+    remote_addr = request.headers.get("X-Forwarded-For", request.remote_addr)
+    if remote_addr and "," in remote_addr:
+        remote_addr = remote_addr.split(",", 1)[0].strip()
+
+    serialized_details = None
+    if details is not None:
+        serialized_details = json.dumps(details, sort_keys=True, default=str)
+
+    db.execute(
+        """
+        INSERT INTO audit_events (
+            actor_user_id,
+            event_type,
+            target_type,
+            target_id,
+            details,
+            ip_address,
+            request_id
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """,
+        (
+            actor_user_id,
+            event_type,
+            target_type,
+            target_id,
+            serialized_details,
+            remote_addr,
+            request_id,
+        ),
+    )
 
 
 def register_blueprints(flask_app):

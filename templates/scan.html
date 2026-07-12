@@ -6,23 +6,26 @@
 <section>
     <h2>Scan Item</h2>
     <p>Scan or type an item barcode, then choose whether stock is being added or removed.</p>
+    <p class="required-note">All fields on this form are required.</p>
 
     {% if error %}
-    <p class="error-message">{{ error }}</p>
+    <p class="error-message" role="alert">{{ error }}</p>
     {% endif %}
 
     {% if message %}
-    <p class="success-message">{{ message }}</p>
+    <p class="success-message" role="status">{{ message }}</p>
     {% endif %}
 
     <form method="post" action="{{ url_for('stock.scan') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <p id="scan-form-alert" class="error-message" role="alert" hidden></p>
         <label for="barcode">Barcode</label>
         <input
             type="text"
             id="barcode"
             name="barcode"
             placeholder="Scan or enter barcode"
+            aria-describedby="scan-form-alert"
             autofocus
             required
         >
@@ -97,6 +100,7 @@
 
         function highlightEmptyFields() {
             var firstEmpty = null;
+            var missingLabels = [];
             requiredFields.forEach(function (fieldId) {
                 var field = document.getElementById(fieldId);
                 if (!field) {
@@ -104,13 +108,27 @@
                 }
                 if (field.value.trim() === "") {
                     field.classList.add("field-error");
+                    field.setAttribute("aria-invalid", "true");
+                    var label = document.querySelector("label[for='" + fieldId + "']");
+                    missingLabels.push(label ? label.textContent : fieldId);
                     if (firstEmpty === null) {
                         firstEmpty = field;
                     }
                 } else {
                     field.classList.remove("field-error");
+                    field.removeAttribute("aria-invalid");
                 }
             });
+            var alertBox = document.getElementById("scan-form-alert");
+            if (alertBox) {
+                if (missingLabels.length > 0) {
+                    alertBox.hidden = false;
+                    alertBox.textContent = "Complete required fields: " + missingLabels.join(", ") + ".";
+                } else {
+                    alertBox.hidden = true;
+                    alertBox.textContent = "";
+                }
+            }
             return firstEmpty;
         }
 
@@ -132,11 +150,13 @@
             field.addEventListener("input", function () {
                 if (field.value.trim() !== "") {
                     field.classList.remove("field-error");
+                    field.removeAttribute("aria-invalid");
                 }
             });
             field.addEventListener("change", function () {
                 if (field.value.trim() !== "") {
                     field.classList.remove("field-error");
+                    field.removeAttribute("aria-invalid");
                 }
             });
         });

@@ -17,7 +17,7 @@
     <p class="login-warning" role="alert">{{ warning }}</p>
     {% endif %}
 
-    <form method="post" action="/login">
+    <form method="post" action="{{ url_for('auth.login') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label for="email">Email</label>
         <input
@@ -51,7 +51,7 @@
 
 {% if error %}
 <div class="modal-backdrop" id="login-error-modal">
-    <div class="modal" role="alertdialog" aria-labelledby="login-error-title" aria-describedby="login-error-message">
+    <div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="login-error-title" aria-describedby="login-error-message">
         <h2 id="login-error-title">Login Not Allowed</h2>
         <p id="login-error-message">{{ error }}</p>
         <button type="button" onclick="document.getElementById('login-error-modal').hidden = true;">

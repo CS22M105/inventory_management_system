@@ -3,9 +3,9 @@
 import csv
 import io
 
-from flask import Blueprint, Response
+from flask import Blueprint, Response, request
 
-from inventory.core import get_db, require_admin
+from inventory.core import get_db, log_audit_event, require_admin
 
 
 bp = Blueprint("reports", __name__)
@@ -69,6 +69,17 @@ def export_inventory():
                 item["notes"],
             ]
         )
+
+    log_audit_event(
+        db,
+        "inventory_csv_exported",
+        target_type="inventory",
+        details={
+            "row_count": len(inventory_items),
+            "path": request.path,
+        },
+    )
+    db.commit()
 
     return Response(
         output.getvalue(),

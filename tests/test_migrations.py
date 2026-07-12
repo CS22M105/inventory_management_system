@@ -32,7 +32,7 @@ MIG_DATABASE_URL = os.environ.get(
     "MIG_DATABASE_URL", "postgresql://localhost/inventory_mig_test"
 )
 
-EXPECTED_TABLES = {"users", "items", "transactions"}
+EXPECTED_TABLES = {"users", "items", "transactions", "audit_events"}
 
 # A representative subset of columns per table -- enough to prove the baseline
 # ran and folded in everything the old ensure_*_columns() shims guaranteed.
@@ -69,6 +69,17 @@ EXPECTED_COLUMNS = {
         "transaction_time",
         "lab_instructor",
         "topic_of_day",
+    },
+    "audit_events": {
+        "id",
+        "actor_user_id",
+        "event_type",
+        "target_type",
+        "target_id",
+        "details",
+        "ip_address",
+        "request_id",
+        "created_at",
     },
 }
 
@@ -224,6 +235,14 @@ def test_upgrade_head_creates_expected_schema(migration_db):
         assert "ix_items_name" in _index_defs(conn, "items"), (
             "missing index ix_items_name"
         )
+
+        audit_indexes = set(_index_defs(conn, "audit_events"))
+        for expected in (
+            "ix_audit_events_created_at",
+            "ix_audit_events_actor_user_id",
+            "ix_audit_events_event_type",
+        ):
+            assert expected in audit_indexes, f"missing index {expected}"
     finally:
         conn.close()
 

@@ -7,6 +7,7 @@ H2 requirement that CSV exports are full filtered sets, not paginated pages.
 
 import csv
 import io
+import json
 
 import app as app_module
 
@@ -118,6 +119,27 @@ def _seed_items_and_transactions(user_id, total_transactions=60):
         return item_ids
 
 
+def _latest_audit_event(event_type):
+    with app_module.app.app_context():
+        db = app_module.get_db()
+        return db.execute(
+            """
+            SELECT
+                actor_user_id,
+                event_type,
+                target_type,
+                details,
+                ip_address,
+                request_id
+            FROM audit_events
+            WHERE event_type = %s
+            ORDER BY created_at DESC, id DESC
+            LIMIT 1
+            """,
+            (event_type,),
+        ).fetchone()
+
+
 def test_transactions_export_returns_full_csv(client, users, login):
     _seed_items_and_transactions(users["faculty"]["id"], total_transactions=60)
     _login_as(login, users, "faculty")
@@ -133,6 +155,14 @@ def test_transactions_export_returns_full_csv(client, users, login):
     # Regression guard: export is not paginated to the default page size of 50.
     assert len(rows) == 61
     assert {row[4] for row in rows[1:]} == {"EXP-A", "EXP-B"}
+
+    audit = _latest_audit_event("transactions_csv_exported")
+    assert audit["actor_user_id"] == users["faculty"]["id"]
+    assert audit["target_type"] == "transactions"
+    details = json.loads(audit["details"])
+    assert details["row_count"] == 60
+    assert details["filters"] == {}
+    assert details["path"] == "/transactions/export"
 
 
 def test_transactions_export_item_filter_returns_only_matching_rows(
@@ -154,6 +184,11 @@ def test_transactions_export_item_filter_returns_only_matching_rows(
     assert len(rows) == 31
     assert {row[4] for row in rows[1:]} == {"EXP-A"}
 
+    audit = _latest_audit_event("transactions_csv_exported")
+    details = json.loads(audit["details"])
+    assert details["row_count"] == 30
+    assert details["filters"] == {"item_id": str(item_ids[0])}
+
 
 def test_inventory_export_returns_csv_columns_and_rows(client, users, login):
     _seed_items_and_transactions(users["admin"]["id"], total_transactions=3)
@@ -170,6 +205,13 @@ def test_inventory_export_returns_csv_columns_and_rows(client, users, login):
     assert len(rows) == 3
     assert {row[0] for row in rows[1:]} == {"EXP-A", "EXP-B"}
     assert {row[4] for row in rows[1:]} == {"Export Vendor"}
+
+    audit = _latest_audit_event("inventory_csv_exported")
+    assert audit["actor_user_id"] == users["admin"]["id"]
+    assert audit["target_type"] == "inventory"
+    details = json.loads(audit["details"])
+    assert details["row_count"] == 2
+    assert details["path"] == "/reports/export"
 
 
 def test_export_routes_redirect_to_login_when_unauthenticated(client, users):

@@ -1722,3 +1722,126 @@ How it was done:
 ### Current Result
 
 The application is now much safer to operate and change. The local product workflows still work, the full automated suite passes with **82 tests**, and the codebase has moved from a single large Flask file to a package structure with blueprints and a thin entrypoint. The remaining launch work is mostly operational: real hosting, managed database backups, production secrets, email delivery, monitoring, and live-domain smoke testing.
+
+## Update: July 10, 2026 — University Market Readiness, Step R1 Accessibility
+
+This update records the first university-readiness step from
+`design_docx/UNIVERSITY_MARKET_READINESS_PLAN.md`. The goal was to move the app
+toward WCAG 2.2 AA accessibility expectations for a university pilot without
+changing the inventory workflows, routes, permissions, or database schema.
+
+### What was changed
+
+- Added `ACCESSIBILITY_STATEMENT.md`.
+- Added `design_docx/ACCESSIBILITY_TEST_CHECKLIST.md`.
+- Added page landmarks and a labeled primary navigation region.
+- Added stronger visible focus styles for links, buttons, dropdown summaries,
+  and form fields.
+- Added a reusable `.sr-only` class and `.required-note` form guidance style.
+- Added alert/status roles to server-rendered error and success messages.
+- Improved dashboard camera scanner accessibility:
+  - named scanner preview region,
+  - live status announcements,
+  - `aria-controls`,
+  - `aria-expanded` state on the Start Camera button.
+- Improved the manual Scan Item form:
+  - missing required fields are announced through an alert,
+  - highlighted empty fields set `aria-invalid`,
+  - field highlights clear when the user fills them.
+- Added required-field notes to critical forms:
+  - Add New Item,
+  - Edit Item,
+  - Stock Action,
+  - Add User,
+  - Reset Password,
+  - Set Password.
+- Updated the login form to use Flask's route helper and marked the login error
+  dialog as modal.
+
+### Why it was needed
+
+- Universities need applications that work for keyboard users, screen-reader
+  users, mobile users, and users who zoom or need strong focus visibility.
+- Accessibility is also a procurement and pilot-readiness issue.
+- The app already had many labels and semantic elements; this step closed the
+  most obvious gaps and created a checklist for formal testing.
+
+### How it was done
+
+- The changes were limited to templates, shared CSS, documentation, and existing
+  client-side scanner/form behavior.
+- No database changes were made.
+- No route URLs were changed.
+- No role/permission behavior was changed.
+- The accessibility statement records known limitations instead of claiming full
+  compliance before manual assistive-technology testing is completed.
+
+### Verification performed
+
+- Markdown/CSS/template whitespace check passed with `git diff --check`.
+- Python compile check passed.
+- Full automated test suite passed with `pytest -q`.
+
+### Remaining accessibility work
+
+- Complete keyboard-only walkthrough of all critical workflows.
+- Test with VoiceOver on macOS or NVDA on Windows.
+- Test mobile layout and mobile screen-reader behavior.
+- Run a browser accessibility checker such as axe DevTools.
+- Record any remaining issues and fixes in this progress report.
+
+## Update: July 12, 2026 — University Market Readiness, Step R2 Privacy/Data Handling
+
+This update records the FERPA-aware privacy and data classification step from
+`design_docx/UNIVERSITY_MARKET_READINESS_PLAN.md`. The goal was to make the app
+clearer and safer for university review by documenting what data is stored and
+by adding an audit trail for CSV exports.
+
+### What was changed
+
+- Added `PRIVACY_AND_DATA_HANDLING.md`.
+- Added Alembic migration `0005_audit_events`.
+- Added the `audit_events` table to `schema.sql` for local development setup.
+- Added a shared `log_audit_event()` helper.
+- Added audit logging for transaction CSV exports.
+- Added audit logging for inventory CSV exports.
+- Updated export tests to confirm audit rows are created.
+- Updated migration tests to confirm `audit_events` exists in the production
+  migration chain.
+- Updated the university market readiness plan with R2 implementation details.
+
+### Why it was needed
+
+- Transaction exports can include user names, lab instructors, topics of day,
+  dates, times, and notes.
+- In a university setting, that can become sensitive student-related activity
+  data.
+- Exporting sensitive records should leave a metadata audit trail so an
+  administrator can answer who exported data, what export type it was, how many
+  rows were included, and which filters were used.
+
+### How it was done
+
+- A new `audit_events` table stores metadata about privacy/security-relevant
+  actions.
+- CSV contents are not copied into the audit log.
+- The transaction export logs the active filters and exported row count.
+- The inventory export logs the exported row count.
+- Existing permissions and routes were not changed because the university still
+  needs to confirm who should see transaction history and who should export CSV
+  files.
+
+### Remaining privacy decisions
+
+- Confirm which fields are allowed.
+- Confirm whether students may view transaction history.
+- Confirm who may export transaction CSV files.
+- Confirm retention periods for transactions, exports, logs, and audit events.
+- Confirm final privacy notice wording for production users.
+
+### Verification performed
+
+- `git diff --check` passed.
+- Python compile check passed.
+- Targeted export/migration tests passed.
+- Full automated test suite passed with `pytest -q`.
