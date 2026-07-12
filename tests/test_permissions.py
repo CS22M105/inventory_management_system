@@ -95,6 +95,7 @@ def test_student_page_access_and_denials(client, users, login):
         (f"/items/{item_id}/edit", "/items"),
         ("/admin/users", "/dashboard"),
         ("/db-status", "/dashboard"),
+        ("/transactions/export", "/dashboard"),
         ("/reports/export", "/dashboard"),
     ]
     for path, redirect_target in blocked_paths:
@@ -124,6 +125,10 @@ def test_faculty_item_management_and_system_admin_denial(client, users, login):
     response = client.get("/db-status")
     assert response.status_code == 302
     assert "/dashboard" in _location(response)
+
+    transaction_export = client.get("/transactions/export")
+    assert transaction_export.status_code == 200
+    assert transaction_export.mimetype == "text/csv"
 
 
 def test_administrator_can_access_system_status_and_inventory_export(

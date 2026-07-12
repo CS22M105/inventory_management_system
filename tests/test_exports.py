@@ -226,3 +226,13 @@ def test_export_routes_redirect_to_login_when_unauthenticated(client, users):
         response = client.get(path)
         assert response.status_code == 302, path
         assert "/login" in _location(response), path
+
+
+def test_student_cannot_export_transactions_csv(client, users, login):
+    _seed_items_and_transactions(users["student"]["id"], total_transactions=2)
+    _login_as(login, users, "student")
+
+    response = client.get("/transactions/export")
+
+    assert response.status_code == 302
+    assert "/dashboard" in _location(response)

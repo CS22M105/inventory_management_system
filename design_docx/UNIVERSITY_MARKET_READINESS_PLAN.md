@@ -686,6 +686,62 @@ CSV_EXPORT_POLICY.md
 Admin training note: what not to type into Notes
 ```
 
+Implementation details - July 12, 2026:
+
+```text
+Status: COMPLETE FOR INITIAL POLICY + EXPORT CONTROL; final retention periods
+        still require university approval.
+
+Files changed:
+    DATA_RETENTION_POLICY.md                (new)
+    CSV_EXPORT_POLICY.md                    (new)
+    ADMIN_NOTES_TRAINING.md                 (new)
+    inventory/transactions/routes.py
+    templates/transactions.html
+    tests/test_permissions.py
+    tests/test_exports.py
+    PROGRESS_REPORT.md
+    design_docx/UNIVERSITY_MARKET_READINESS_PLAN.md
+
+What was implemented:
+    - Added DATA_RETENTION_POLICY.md.
+    - Added CSV_EXPORT_POLICY.md.
+    - Added ADMIN_NOTES_TRAINING.md.
+    - Limited transaction CSV export to faculty and administrators.
+    - Hid the transaction CSV export button from students.
+    - Left on-screen transaction history unchanged until university policy
+      confirms whether students should continue viewing it.
+    - Kept inventory CSV export limited to elevated roles.
+    - Kept export audit logging from R3 in place.
+    - Added tests proving students cannot export transaction CSV.
+    - Added tests proving faculty can export transaction CSV.
+
+Why:
+    CSV exports can contain user names, activity, lab instructor, topic of day,
+    dates, times, and notes. Those files leave the app after download, so access
+    and handling rules must be explicit before a university pilot.
+
+How:
+    The implementation focused on policy documents and one narrow export-control
+    change. It did not delete historical records, change transaction retention
+    automatically, or add a purge job because final retention windows still need
+    university approval.
+
+Verification completed:
+    - Transaction export route now uses the elevated-role guard.
+    - Transaction export button is hidden from students.
+    - Regression tests cover student denial and faculty access.
+    - py_compile passed.
+    - pytest -q passed with 91 tests.
+
+Remaining decisions:
+    - Final transaction retention period.
+    - Final audit-log retention period.
+    - Whether faculty export remains approved or admin-only is required.
+    - Approved storage location for downloaded CSV files.
+    - Whether automated purge/archive jobs are required.
+```
+
 ---
 
 ## Step R5 - Best Hosting Platform Choice

@@ -1867,6 +1867,60 @@ and system actions.
 - Add retention cleanup after university policy confirms the retention period.
 - Add audit-log export only if university policy approves it.
 
+## Update: July 12, 2026 — University Market Readiness, Step R4 Data Retention and Export Control
+
+This update records the data retention and CSV export-control step from
+`design_docx/UNIVERSITY_MARKET_READINESS_PLAN.md`. The goal was to document
+retention/export expectations and close the student CSV-export gap.
+
+### What was changed
+
+- Added `DATA_RETENTION_POLICY.md`.
+- Added `CSV_EXPORT_POLICY.md`.
+- Added `ADMIN_NOTES_TRAINING.md`.
+- Changed `/transactions/export` so only faculty and administrators can export
+  transaction CSV files.
+- Hid the transaction CSV export button from students.
+- Kept on-screen transaction history unchanged until the university confirms
+  whether students should continue viewing it.
+- Added tests proving students cannot export transaction CSV.
+- Added tests proving faculty can export transaction CSV.
+- Updated the university market readiness plan with R4 implementation details.
+
+### Why it was needed
+
+- Transaction exports can contain user activity, lab instructor, topic of day,
+  dates, times, and notes.
+- CSV files leave the app after download, so the app needs clear handling rules
+  and tighter export access.
+- Notes fields need explicit training guidance so users do not enter patient
+  names, diagnoses, grades, or unnecessary sensitive student information.
+
+### How it was done
+
+- The app now uses the elevated-role guard for transaction CSV export.
+- The transaction page only shows the export button to faculty and
+  administrators.
+- Retention periods were documented but not automated because the final schedule
+  must be approved by university stakeholders.
+- Export audit logging from R3 remains in place.
+
+### Verification performed
+
+- `git diff --check` passed.
+- Python compile check passed.
+- Focused export/permission/audit tests passed.
+- Full automated test suite passed with `pytest -q`:
+  - 91 tests passed.
+
+### Remaining policy decisions
+
+- Confirm transaction retention period.
+- Confirm audit-log retention period.
+- Confirm whether faculty export is approved or exports should be admin-only.
+- Confirm where exported CSV files may be stored.
+- Confirm whether automated archive/purge jobs are required.
+
 ### Remaining accessibility work
 
 - Complete keyboard-only walkthrough of all critical workflows.

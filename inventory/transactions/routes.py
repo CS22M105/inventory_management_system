@@ -13,6 +13,7 @@ from inventory.core import (
     get_transaction_filters,
     get_transaction_rows,
     log_audit_event,
+    require_admin,
     require_login,
 )
 
@@ -82,7 +83,7 @@ def transactions():
 
 @bp.route("/transactions/export")
 def export_transactions():
-    login_redirect = require_login()
+    login_redirect = require_admin()
 
     if login_redirect is not None:
         return login_redirect
