@@ -219,6 +219,7 @@ Required production environment variables:
 | `DATABASE_URL` | Yes | Managed PostgreSQL connection string. Shared by the Flask app and Alembic migrations through `migrations/env.py`. |
 | `APP_BASE_URL` | No | Public HTTPS base URL used when generating invite/reset links and QR-code links. |
 | `EMAIL_PROVIDER` | No | Set to `smtp` in production so invite/reset emails are actually sent. |
+| `ALLOW_LOCAL_AUTH_LINKS` | No | Temporary testing escape hatch. Set `true` only on a private/staging deploy to show invite/reset links when SMTP is not configured. Keep `false` for real production. |
 | `EMAIL_FROM` | No | Approved sender address for invite/reset emails. |
 | `SMTP_HOST` | No | SMTP provider hostname. |
 | `SMTP_PORT` | No | SMTP provider port, usually `587` for STARTTLS or `465` for SSL. |

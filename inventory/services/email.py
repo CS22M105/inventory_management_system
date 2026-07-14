@@ -18,6 +18,7 @@ def send_email(
     smtp_use_tls,
     smtp_use_ssl,
     app_env,
+    allow_local_auth_links,
     logger,
 ):
     if provider == "smtp":
@@ -50,8 +51,17 @@ def send_email(
             f"Unsupported EMAIL_PROVIDER={provider!r}. Use EMAIL_PROVIDER=smtp."
         )
 
-    if app_env == "production":
+    if app_env == "production" and not allow_local_auth_links:
         raise RuntimeError("EMAIL_PROVIDER=smtp must be configured in production.")
+
+    if app_env == "production":
+        logger.warning(
+            "AUTH LINK FALLBACK ENABLED; email was not sent.\nTo: %s\nSubject: %s\n\n%s",
+            to,
+            subject,
+            body,
+        )
+        return False
 
     logger.info(
         "DEV EMAIL (not actually sent)\nTo: %s\nSubject: %s\n\n%s",

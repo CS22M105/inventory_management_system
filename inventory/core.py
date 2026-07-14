@@ -36,6 +36,7 @@ from inventory.cli import _alembic_config, register_cli
 from inventory.config import (
     APP_BASE_URL,
     APP_ENV,
+    ALLOW_LOCAL_AUTH_LINKS,
     BARCODE_PREFIX,
     BASE_DIR,
     DEV_SECRET_KEY,
@@ -245,6 +246,7 @@ def send_email(to, subject, body):
         smtp_use_tls=SMTP_USE_TLS,
         smtp_use_ssl=SMTP_USE_SSL,
         app_env=APP_ENV,
+        allow_local_auth_links=ALLOW_LOCAL_AUTH_LINKS,
         logger=app.logger,
     )
 

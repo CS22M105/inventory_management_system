@@ -39,6 +39,7 @@ INVITE_TOKEN_MAX_AGE = 72 * 60 * 60
 RESET_TOKEN_MAX_AGE = 60 * 60
 
 EMAIL_PROVIDER = os.environ.get("EMAIL_PROVIDER", "").strip().lower()
+ALLOW_LOCAL_AUTH_LINKS = env_flag("ALLOW_LOCAL_AUTH_LINKS", APP_ENV != "production")
 EMAIL_FROM = os.environ.get("EMAIL_FROM", "").strip()
 SMTP_HOST = os.environ.get("SMTP_HOST", "").strip()
 SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))

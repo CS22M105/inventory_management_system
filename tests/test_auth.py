@@ -10,6 +10,7 @@ import re
 from datetime import timedelta
 
 import app as app_module
+from inventory.services.email import send_email
 
 
 def _location(response):
@@ -171,6 +172,33 @@ def test_forgot_password_unknown_email_sends_nothing(client, users, captured_ema
     resp = client.post("/forgot-password", data={"email": "ghost@test.edu"})
     assert resp.status_code == 200
     assert len(captured_emails) == 0
+
+
+def test_production_email_fallback_requires_explicit_flag():
+    kwargs = {
+        "to": "student@test.edu",
+        "subject": "Reset",
+        "body": "Reset link",
+        "provider": "",
+        "email_from": "",
+        "smtp_host": "",
+        "smtp_port": 587,
+        "smtp_username": "",
+        "smtp_password": "",
+        "smtp_use_tls": True,
+        "smtp_use_ssl": False,
+        "app_env": "production",
+        "logger": app_module.app.logger,
+    }
+
+    try:
+        send_email(**kwargs, allow_local_auth_links=False)
+    except RuntimeError as error:
+        assert "EMAIL_PROVIDER=smtp" in str(error)
+    else:
+        raise AssertionError("production fallback should require explicit opt-in")
+
+    assert send_email(**kwargs, allow_local_auth_links=True) is False
 
 
 # ---------------------------------------------------------------------------
