@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block title %}QR Label: {{ item["name"] }} | Nursing Inventory System{% endblock %}
+
+{% block content %}
+<section>
+    <div class="page-header no-print">
+        <div>
+            <h2>QR Code Only Label</h2>
+            <p>Print only the QR code with the item code below it.</p>
+        </div>
+    </div>
+
+    <div class="qr-label qr-label-compact">
+        <img
+            src="{{ url_for('items.item_qr_png', barcode=item['barcode']) }}"
+            alt="QR code for {{ item['barcode'] }}"
+        >
+        <p class="qr-label-code">{{ item["barcode"] }}</p>
+    </div>
+
+    <div class="action-group no-print" style="margin-top: 24px;">
+        <button type="button" onclick="window.print()">Print QR Only</button>
+        <a class="button-link secondary-link" href="{{ url_for('items.item_label', barcode=item['barcode']) }}">Full Label</a>
+        <a class="button-link secondary-link" href="{{ url_for('items.item_detail', barcode=item['barcode']) }}">Back to Item</a>
+        <a class="button-link secondary-link" href="{{ url_for('items.items') }}">Back to All Items</a>
+    </div>
+</section>
+{% endblock %}

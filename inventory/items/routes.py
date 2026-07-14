@@ -161,6 +161,39 @@ def item_label(barcode):
     return render_template("item_label.html", item=item)
 
 
+@bp.route("/items/<barcode>/qr-label")
+def item_qr_label(barcode):
+    login_redirect = require_item_manager()
+
+    if login_redirect is not None:
+        return login_redirect
+
+    db = get_db()
+    item = db.execute(
+        """
+        SELECT id, barcode, name
+        FROM items
+        WHERE barcode = %s
+        """,
+        (barcode,),
+    ).fetchone()
+
+    if item is None:
+        abort(404, description="Not recognized")
+
+    log_audit_event(
+        db,
+        "qr_label_viewed",
+        target_type="item",
+        target_id=item["id"],
+        target_label=f"{item['name']} ({item['barcode']})",
+        details={"barcode": item["barcode"], "format": "qr_only"},
+    )
+    db.commit()
+
+    return render_template("item_qr_label.html", item=item)
+
+
 @bp.route("/items/new", methods=["GET", "POST"])
 def item_new():
     manager_redirect = require_item_manager()

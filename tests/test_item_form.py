@@ -65,6 +65,14 @@ def test_create_item_with_real_date(client, users, login):
     assert b"Exp:" in label.data
     assert b"2025-12-31" in label.data
 
+    qr_only = client.get("/items/ITM-DATE/qr-label")
+    assert qr_only.status_code == 200
+    assert b"QR Code Only Label" in qr_only.data
+    assert b"ITM-DATE" in qr_only.data
+    assert b"Room:" not in qr_only.data
+    assert b"Vendor:" not in qr_only.data
+    assert b"Exp:" not in qr_only.data
+
 
 def test_create_item_without_date_is_null(client, users, login):
     _manager_login(login, users)
@@ -126,4 +134,5 @@ def test_sentinel_never_appears(client, users, login):
     for barcode in ("ITM-A", "ITM-B"):
         pages += client.get(f"/items/{barcode}").data
         pages += client.get(f"/items/{barcode}/label").data
+        pages += client.get(f"/items/{barcode}/qr-label").data
     assert b"00/00/0000" not in pages
