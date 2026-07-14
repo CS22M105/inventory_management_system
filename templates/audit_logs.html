@@ -3,48 +3,55 @@
 {% block title %}Audit Logs{% endblock %}
 
 {% block content %}
-<section>
+<section class="audit-log-section">
     <h2>Audit Logs</h2>
     <p class="page-intro">Most recent audit events are shown first.</p>
 
-    <table>
-        <thead>
-            <tr>
-                <th>Created</th>
-                <th>Actor</th>
-                <th>Role</th>
-                <th>Action</th>
-                <th>Target</th>
-                <th>Request</th>
-                <th>IP</th>
-                <th>Details</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for entry in audit_logs %}
-            <tr>
-                <td>{{ entry.created_at }}</td>
-                <td>{{ entry.actor_email_snapshot or "System/CLI" }}</td>
-                <td>{{ entry.actor_role_snapshot or "-" }}</td>
-                <td>{{ entry.action }}</td>
-                <td>
-                    {{ entry.target_type or "-" }}
-                    {% if entry.target_label %}
-                    <br>{{ entry.target_label }}
-                    {% elif entry.target_id %}
-                    <br>{{ entry.target_id }}
-                    {% endif %}
-                </td>
-                <td>{{ entry.request_id or "-" }}</td>
-                <td>{{ entry.ip_address or "-" }}</td>
-                <td><code>{{ entry.details_json or "{}" }}</code></td>
-            </tr>
-            {% else %}
-            <tr>
-                <td colspan="8">No audit logs recorded yet.</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+    <div class="audit-log-list" aria-label="Audit log entries">
+        {% for entry in audit_logs %}
+        <article class="audit-log-entry">
+            <div class="audit-log-entry-header">
+                <div>
+                    <h3>{{ entry.action }}</h3>
+                    <p>{{ entry.created_at }}</p>
+                </div>
+                <span>{{ entry.actor_role_snapshot or "System" }}</span>
+            </div>
+
+            <dl class="audit-log-fields">
+                <div>
+                    <dt>Actor</dt>
+                    <dd>{{ entry.actor_email_snapshot or "System/CLI" }}</dd>
+                </div>
+                <div>
+                    <dt>Target</dt>
+                    <dd>
+                        {{ entry.target_type or "-" }}
+                        {% if entry.target_label %}
+                        <br>{{ entry.target_label }}
+                        {% elif entry.target_id %}
+                        <br>{{ entry.target_id }}
+                        {% endif %}
+                    </dd>
+                </div>
+                <div>
+                    <dt>Request</dt>
+                    <dd>{{ entry.request_id or "-" }}</dd>
+                </div>
+                <div>
+                    <dt>IP Address</dt>
+                    <dd>{{ entry.ip_address or "-" }}</dd>
+                </div>
+            </dl>
+
+            <div class="audit-log-details">
+                <h4>Details</h4>
+                <code>{{ entry.details_json or "{}" }}</code>
+            </div>
+        </article>
+        {% else %}
+        <p>No audit logs recorded yet.</p>
+        {% endfor %}
+    </div>
 </section>
 {% endblock %}
