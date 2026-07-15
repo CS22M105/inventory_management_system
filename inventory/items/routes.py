@@ -254,7 +254,7 @@ def item_new():
             db.rollback()
             return render_template(
                 "item_new.html",
-                error="An item with this barcode already exists.",
+                error="An item with this code already exists.",
                 item=item_data,
             ), 400
 
@@ -363,7 +363,7 @@ def item_edit(item_id):
             item_data["id"] = item_id
             return render_template(
                 "item_edit.html",
-                error="An item with this barcode already exists.",
+                error="An item with this code already exists.",
                 item=item_data,
             ), 400
 

@@ -41,7 +41,7 @@ def export_inventory():
     writer = csv.writer(output)
     writer.writerow(
         [
-            "Barcode",
+            "Code",
             "Item Name",
             "Bin Location",
             "Room",

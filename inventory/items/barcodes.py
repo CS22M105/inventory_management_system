@@ -1,4 +1,4 @@
-"""Barcode generation helpers."""
+"""Item-code generation helpers."""
 
 
 def generate_next_item_barcode(db, prefix):

@@ -95,7 +95,7 @@
             statusText.classList.toggle("scan-status-error", Boolean(isError));
         }
 
-        function getBarcodeFromScan(scannedText) {
+        function getItemCodeFromScan(scannedText) {
             var value = scannedText.trim();
             if (!value) {
                 return "";
@@ -108,7 +108,7 @@
                     return decodeURIComponent(match[1]);
                 }
             } catch (error) {
-                // Raw barcode values are handled below.
+                // Raw item code values are handled below.
             }
 
             return value;
@@ -123,9 +123,9 @@
                 return;
             }
 
-            var barcode = getBarcodeFromScan(scannedText);
-            if (!barcode) {
-                setScannerStatus("QR code was read, but no barcode was found.", true);
+            var itemCode = getItemCodeFromScan(scannedText);
+            if (!itemCode) {
+                setScannerStatus("QR code was read, but no item code was found.", true);
                 return;
             }
 
@@ -144,10 +144,10 @@
                     startButton.disabled = false;
                     startButton.setAttribute("aria-expanded", "false");
                     stopButton.disabled = true;
-                    window.location.href = getStockUrl(barcode);
+                    window.location.href = getStockUrl(itemCode);
                 });
             } else {
-                window.location.href = getStockUrl(barcode);
+                window.location.href = getStockUrl(itemCode);
             }
         }
 

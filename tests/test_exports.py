@@ -17,7 +17,7 @@ TRANSACTION_HEADER = [
     "Time",
     "Action",
     "Item",
-    "Barcode",
+    "Code",
     "Quantity",
     "Lab Instructor",
     "Topic",
@@ -26,7 +26,7 @@ TRANSACTION_HEADER = [
 ]
 
 INVENTORY_HEADER = [
-    "Barcode",
+    "Code",
     "Item Name",
     "Bin Location",
     "Room",

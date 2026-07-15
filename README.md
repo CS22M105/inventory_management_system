@@ -1,12 +1,12 @@
 # Nursing Inventory Management System
 
-This project is a barcode-based inventory management system for nursing education, simulation labs, medication rooms, and healthcare training environments.
+This project is a code-based inventory management system for nursing education, simulation labs, medication rooms, and healthcare training environments.
 
 The goal is to replace manual Excel-based inventory tracking with a simple web application that can:
 
 - Let users log in with a student, faculty, or staff ID.
 - Add new inventory items.
-- Track items using barcode values.
+- Track items using item codes.
 - Record how many items are added or removed.
 - Save inventory activity in a database.
 - Support reports and exports later.
@@ -19,7 +19,7 @@ Completed so far:
 
 - Registered user and administrator login.
 - Inventory item creation and listing.
-- Barcode-based add/remove stock workflow.
+- Code-based add/remove stock workflow.
 - Transaction history.
 - Dashboard counts.
 - CSV inventory export.
@@ -48,7 +48,7 @@ inventory/
     observability.py    Sentry and request logging
     auth/               auth routes, password helpers, token helpers
     dashboard/          dashboard and /health routes
-    items/              item routes, forms, barcode helpers
+    items/              item routes, forms, item-code helpers
     stock/              scan/stock routes and stock service
     transactions/       transaction routes and query helpers
     reports/            inventory export route
@@ -182,7 +182,7 @@ Test modules:
 | File | Coverage |
 | --- | --- |
 | `tests/test_auth.py` | Login, invite/set-password, reset-password, protected routes, role access, sudo-mode, lockout, and rate limiting. |
-| `tests/test_stock.py` | Stock add/remove through `/scan` and `/items/<barcode>/stock`, transaction context fields, unknown barcodes, and over-removal protection. |
+| `tests/test_stock.py` | Stock add/remove through `/scan` and `/items/<barcode>/stock`, transaction context fields, unknown item codes, and over-removal protection. |
 | `tests/test_permissions.py` | Route-level student/faculty/administrator permissions for items, admin users, DB status, reports, QR, and protected admin accounts. |
 | `tests/test_exports.py` | Transaction and inventory CSV exports, filters, unauthenticated redirects, and non-paginated export behavior. |
 | `tests/test_migrations.py` | Alembic upgrade from empty DB, downgrade/upgrade round trip, and single migration head. |
@@ -232,7 +232,7 @@ Optional environment variables:
 
 | Variable | Secret? | Description |
 | --- | --- | --- |
-| `BARCODE_PREFIX` | No | Per-customer prefix for generated item codes, for example `KATZ-NURS`. |
+| `BARCODE_PREFIX` | No | Per-customer prefix for generated item codes, for example `KATZ-NURS`. The environment variable keeps its historical name for compatibility. |
 | `SESSION_IDLE_MINUTES` | No | Minutes of inactivity before a signed session expires. |
 | `SUDO_MODE_MAX_AGE` | No | Seconds after login/re-auth that destructive admin actions remain allowed. |
 | `LOGIN_MAX_ATTEMPTS` | No | Consecutive failed-login threshold before temporary lockout. |

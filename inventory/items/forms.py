@@ -40,11 +40,11 @@ def get_item_form_data(form, require_barcode=True):
         return data, "Quantity values must be numbers."
 
     if require_barcode and not data["barcode"]:
-        return data, "Barcode, name, bin location, and room are required."
+        return data, "Code, name, bin location, and room are required."
 
     if not data["name"] or not data["bin_location"] or not data["room"]:
         if require_barcode:
-            return data, "Barcode, name, bin location, and room are required."
+            return data, "Code, name, bin location, and room are required."
         return data, "Name, bin location, and room are required."
 
     if data["quantity"] < 0 or data["minimum_quantity"] < 0:

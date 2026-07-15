@@ -23,7 +23,7 @@
     <div class="qr-label qr-label-compact">
         <img
             src="{{ url_for('items.item_qr_png', barcode=item['barcode']) }}"
-            alt="QR code for {{ item['barcode'] }}"
+            alt="QR code for item code {{ item['barcode'] }}"
         >
         <p class="qr-label-code">{{ item["barcode"] }}</p>
     </div>

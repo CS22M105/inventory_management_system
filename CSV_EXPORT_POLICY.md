@@ -14,8 +14,8 @@ should be handled, and what users must avoid.
 
 | Export | Current route | Data included | Risk |
 | --- | --- | --- | --- |
-| Transaction CSV | `/transactions/export` | date, time, action, item, barcode, quantity, lab instructor, topic, user, notes | May contain student/activity-related data |
-| Inventory CSV | `/reports/export` | barcode, item name, room, bin, vendor, quantity, minimum quantity, location, expiration date, notes | Internal operational inventory data |
+| Transaction CSV | `/transactions/export` | date, time, action, item, code, quantity, lab instructor, topic, user, notes | May contain student/activity-related data |
+| Inventory CSV | `/reports/export` | code, item name, room, bin, vendor, quantity, minimum quantity, location, expiration date, notes | Internal operational inventory data |
 
 ## Access Policy
 

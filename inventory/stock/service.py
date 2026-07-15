@@ -13,7 +13,7 @@ def process_stock_transaction(db, user_id, barcode, form, audit_callback=None):
         return None, "Quantity must be a number.", 400
 
     if not barcode:
-        return None, "Barcode is required.", 400
+        return None, "Code is required.", 400
     if transaction_type not in {"add", "remove"}:
         return None, "Choose Add Stock or Remove Stock.", 400
     if quantity <= 0:
@@ -30,7 +30,7 @@ def process_stock_transaction(db, user_id, barcode, form, audit_callback=None):
         (barcode,),
     ).fetchone()
     if item is None:
-        return None, "No item was found for that barcode.", 404
+        return None, "No item was found for that code.", 404
     if transaction_type == "remove" and quantity > item["quantity"]:
         return None, f"Cannot remove {quantity}. Only {item['quantity']} available.", 400
 

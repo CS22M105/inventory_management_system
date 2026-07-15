@@ -12,7 +12,7 @@
 
         <a class="button-link" href="{{ url_for('items.items') }}">All Items</a>
     </div>
-    <p class="required-note">Barcode, item name, room, bin location, quantity, and minimum quantity are required.</p>
+    <p class="required-note">Code, item name, room, bin location, quantity, and minimum quantity are required.</p>
 
     {% if error %}
     <p class="error-message" role="alert">{{ error }}</p>
@@ -20,7 +20,7 @@
 
     <form method="post" action="{{ url_for('items.item_edit', item_id=item['id']) }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <label for="barcode">Barcode</label>
+        <label for="barcode">Code</label>
         <input
             type="text"
             id="barcode"

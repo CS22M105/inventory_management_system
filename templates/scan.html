@@ -5,7 +5,7 @@
 {% block content %}
 <section>
     <h2>Scan Item</h2>
-    <p>Scan or type an item barcode, then choose whether stock is being added or removed.</p>
+    <p>Scan or type an item code, then choose whether stock is being added or removed.</p>
     <p class="required-note">All fields on this form are required.</p>
 
     {% if error %}
@@ -19,12 +19,12 @@
     <form method="post" action="{{ url_for('stock.scan') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <p id="scan-form-alert" class="error-message" role="alert" hidden></p>
-        <label for="barcode">Barcode</label>
+        <label for="barcode">Code</label>
         <input
             type="text"
             id="barcode"
             name="barcode"
-            placeholder="Scan or enter barcode"
+            placeholder="Scan or enter code"
             aria-describedby="scan-form-alert"
             autofocus
             required
@@ -79,13 +79,13 @@
 </section>
 
 <script>
-    // Barcode scanners are keyboard-wedge devices: they type the barcode and
-    // then send an Enter keystroke. Because the barcode box is autofocused,
+    // Code scanners are keyboard-wedge devices: they type the item code and
+    // then send an Enter keystroke. Because the code box is autofocused,
     // that Enter would submit the form before the rest of the fields are
-    // filled. Intercept Enter in the barcode field so a scan never submits an
+    // filled. Intercept Enter in the code field so a scan never submits an
     // incomplete transaction. Instead of moving focus away, highlight every
     // still-empty required field so the user can see exactly what is missing
-    // while keeping their place in the barcode box.
+    // while keeping their place in the code box.
     document.addEventListener("DOMContentLoaded", function () {
         var form = document.querySelector("form");
         var barcodeInput = document.getElementById("barcode");

@@ -100,7 +100,7 @@ def export_transactions():
             "Time",
             "Action",
             "Item",
-            "Barcode",
+            "Code",
             "Quantity",
             "Lab Instructor",
             "Topic",

@@ -5,8 +5,8 @@
 {% block content %}
 <section>
     <h2>Add New Item</h2>
-    <p>Register a new inventory item so it can be tracked by barcode.</p>
-    <p class="required-note">Name, room, bin location, quantity, and minimum quantity are required. Barcode is optional and will be generated if left blank.</p>
+    <p>Register a new inventory item so it can be tracked by code.</p>
+    <p class="required-note">Name, room, bin location, quantity, and minimum quantity are required. Code is optional and will be generated if left blank.</p>
 
     {% if error %}
     <p class="error-message" role="alert">{{ error }}</p>
@@ -14,7 +14,7 @@
 
     <form method="post" action="{{ url_for('items.item_new') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <label for="barcode">Barcode / Internal Code</label>
+        <label for="barcode">Code</label>
         <input
             type="text"
             id="barcode"
