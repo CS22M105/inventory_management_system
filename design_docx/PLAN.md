@@ -2,25 +2,26 @@
 
 ## Recommended Reading Sequence
 
-Read the project documents in this order to build understanding from the "why"
-to the "how" to the "what is built next":
+Read the project documents in this order to build understanding from the current
+system requirements to operations and deployment:
 
-1. `design_docx/planning_and_proposal.md` — The original proposal. Explains the
-   problem, the goal, and the overall idea (start here).
-2. `design_docx/HIGH_LEVEL_DESIGN.md` — The systems-design view: how users, the
-   web app, the database, and the scanner fit together.
-3. `design_docx/SYSTEM_DIAGRAMS.md` — Visual Mermaid diagrams (context, data,
-   classes, and user workflows) that support the high-level design.
-4. `design_docx/PLAN.md` — This file. The concrete skeleton plan for the first
-   runnable Flask + PostgreSQL app.
-5. `design_docx/PROJECT_DOCUMENTATION.md` — The main learning/documentation
-   record: what was added, why, and how it works.
-6. `README.md` — How to install, initialize the database, and run the app.
-7. `PROGRESS_REPORT.md` — What has actually been built so far and current status.
-8. `QR_CODE_SYSTEM_INTEGRATION_PLAN.md` — Plan to add self-generated QR code
-   labels and camera-based scanning.
-9. `SECURITY_AND_AUTH_PLAN.md` — Plan to move from ID-only login to secure,
-    production-ready authentication.
+1. `design_docx/SOFTWARE_REQUIREMENTS_SPECIFICATION.md` — The consolidated
+   requirements, architecture, workflows, and system diagrams.
+2. `README.md` — How to install, initialize the database, run tests, configure
+   production, and start the app.
+3. `PROGRESS_REPORT.md` — What has actually been built so far and current status.
+4. `design_docx/PROJECT_DOCUMENTATION.md` — Beginner-friendly implementation
+   notes and project explanation.
+5. `QR_CODE_SYSTEM_INTEGRATION_PLAN.md` — QR code labels and camera-based
+   scanning plan/status.
+6. `SECURITY_AND_AUTH_PLAN.md` — Authentication and security-hardening plan.
+7. `DATA_MIGRATIONS_RELIABILITY_PLAN.md` — Database migrations, reliability,
+   backups, and restore planning.
+8. `DEPLOYMENT_INFRASTRUCTURE_PLAN.md` — Hosting, managed PostgreSQL, TLS, and
+   deployment plan.
+9. `QUALITY_OPERATIONS_PLAN.md` — Testing, observability, health checks, and
+   maintainability plan.
+10. `UNIVERSITY_MARKET_READINESS_PLAN.md` — University/product readiness plan.
 
 ## Summary
 

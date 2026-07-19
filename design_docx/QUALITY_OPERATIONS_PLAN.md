@@ -811,7 +811,7 @@ Implementation details — July 10, 2026:
 Status: DONE.
 
 Files changed:
-    ARCHITECTURE.md   (new)
+    ARCHITECTURE.md   (legacy source, now consolidated into SOFTWARE_REQUIREMENTS_SPECIFICATION.md)
     design_docx/QUALITY_OPERATIONS_PLAN.md
 
 What was implemented:
@@ -832,7 +832,7 @@ Why:
     changing permissions, URLs, stock behavior, templates, or deployment commands.
 
 How:
-    ARCHITECTURE.md maps the current app into a future inventory/ package. It
+    The legacy architecture note mapped the app into a future inventory/ package. It
     keeps existing local and production entrypoints working during the transition:
         flask --app app run --debug
         gunicorn app:app -c gunicorn.conf.py
@@ -879,7 +879,7 @@ Status: DONE.
 
 Files changed:
     app.py
-    ARCHITECTURE.md
+    ARCHITECTURE.md   (legacy source, now consolidated into SOFTWARE_REQUIREMENTS_SPECIFICATION.md)
     inventory/__init__.py                         (new)
     inventory/auth/__init__.py                    (new)
     inventory/auth/passwords.py                   (new)
@@ -966,7 +966,7 @@ Files changed:
     inventory/stock/__init__.py                  (new)
     inventory/stock/routes.py                    (new)
     inventory/transactions/routes.py             (new)
-    ARCHITECTURE.md
+    ARCHITECTURE.md   (legacy source, now consolidated into SOFTWARE_REQUIREMENTS_SPECIFICATION.md)
     design_docx/QUALITY_OPERATIONS_PLAN.md
 
 What was implemented:
@@ -1034,7 +1034,7 @@ Status: DONE.
 Files changed:
     app.py
     README.md
-    ARCHITECTURE.md
+    ARCHITECTURE.md   (legacy source, now consolidated into SOFTWARE_REQUIREMENTS_SPECIFICATION.md)
     design_docx/QUALITY_OPERATIONS_PLAN.md
     inventory/__init__.py
     inventory/core.py

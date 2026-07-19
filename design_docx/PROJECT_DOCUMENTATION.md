@@ -39,30 +39,18 @@ inventory/
 
 This folder contains all planning files, future source code files, templates, styles, scripts, and database files for the inventory project.
 
-## Files Created So Far
+## Current Documentation Set
 
-### `planning_and_proposal.md`
+The earlier proposal, high-level design, architecture, and system diagram files
+were consolidated into:
 
-This file contains the professional proposal for the project.
+```text
+design_docx/SOFTWARE_REQUIREMENTS_SPECIFICATION.md
+```
 
-It explains:
-
-- The problem being solved.
-- The proposed barcode-based solution.
-- Target users.
-- Core features.
-- MVP scope.
-- Timeline.
-- Risks.
-- Success criteria.
-
-Why this file exists:
-
-The proposal is useful for presenting the project idea professionally to supervisors, faculty, project reviewers, or stakeholders.
-
-How it should be used:
-
-This file should stay focused on the high-level project proposal. It should not be used for day-to-day coding notes.
+Those older source documents were removed to reduce redundancy. Use the SRS as
+the current single document for requirements, architecture, workflows, diagrams,
+and product scope.
 
 ### `PLAN.md`
 
@@ -82,22 +70,6 @@ The plan acts like a map before coding. It helps us avoid randomly creating file
 How it should be used:
 
 This file should guide the early build process. When a task is completed, we can compare the project against this plan.
-
-### `Phase 1 and Phase 2 Build Plan.md`
-
-This file contains the specific plan for the first two phases of the project.
-
-Phase 1 focuses on requirements and design.
-
-Phase 2 focuses on setting up the first prototype.
-
-Why this file exists:
-
-The full project is too large to build all at once. This file breaks the work into smaller, beginner-friendly phases.
-
-How it should be used:
-
-Use it to understand what should happen first before advanced features are added.
 
 ### `requirements.txt`
 
