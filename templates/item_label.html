@@ -32,6 +32,9 @@
     <div class="action-group no-print" style="margin-top: 24px;">
         <button type="button" onclick="window.print()">Print Label</button>
         <a class="button-link secondary-link" href="{{ url_for('items.item_qr_label', barcode=item['barcode']) }}">QR Only Label</a>
+        <a class="button-link secondary-link" href="{{ url_for('items.item_label_sheet', barcode=item['barcode']) }}">Print Multiple QR Labels</a>
+        <a class="button-link secondary-link" href="{{ url_for('items.item_qr_png', barcode=item['barcode'], download=1) }}">Download QR PNG</a>
+        <a class="button-link secondary-link" href="{{ url_for('items.item_qr_label_png', barcode=item['barcode']) }}">Download QR + Label PNG</a>
         <a class="button-link secondary-link" href="{{ url_for('items.item_detail', barcode=item['barcode']) }}">Back to Item</a>
         <a class="button-link secondary-link" href="{{ url_for('items.items') }}">Back to All Items</a>
     </div>

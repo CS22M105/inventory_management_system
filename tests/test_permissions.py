@@ -114,6 +114,8 @@ def test_faculty_item_management_and_system_admin_denial(client, users, login):
         "/admin/users",
         f"/items/{barcode}/label",
         f"/items/{barcode}/qr-label",
+        f"/items/{barcode}/label-sheet",
+        f"/items/{barcode}/qr-label.png",
         f"/items/{barcode}/qr.png",
     ]
     for path in allowed_paths:

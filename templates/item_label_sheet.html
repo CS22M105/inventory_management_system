@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}QR Label Sheet: {{ item["name"] }} | Nursing Inventory System{% endblock %}
+
+{% block extra_css %}
+<style>
+    .label-sheet-grid {
+        gap: {{ spacing_mm }}mm;
+    }
+
+    .label-sheet-qr {
+        height: {{ qr_size_mm }}mm;
+        width: {{ qr_size_mm }}mm;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<section>
+    <div class="page-header no-print">
+        <div>
+            <h2>Print Multiple QR Labels</h2>
+            <p>{{ item["name"] }} &middot; {{ item["barcode"] }}</p>
+        </div>
+    </div>
+
+    <form class="filter-form no-print" method="get" action="{{ url_for('items.item_label_sheet', barcode=item['barcode']) }}">
+        <div>
+            <label for="copies">Copies</label>
+            <input type="number" id="copies" name="copies" min="1" max="100" value="{{ copies }}">
+        </div>
+
+        <div>
+            <label for="qr_size_mm">QR Size (mm)</label>
+            <input type="number" id="qr_size_mm" name="qr_size_mm" min="10" max="40" value="{{ qr_size_mm }}">
+        </div>
+
+        <div>
+            <label for="spacing_mm">Spacing (mm)</label>
+            <input type="number" id="spacing_mm" name="spacing_mm" min="0" max="20" value="{{ spacing_mm }}">
+        </div>
+
+        <div>
+            <label for="label_text">Label Text</label>
+            <input type="text" id="label_text" name="label_text" value="{{ label_text }}">
+        </div>
+
+        <div class="filter-actions">
+            <button type="submit">Update Sheet</button>
+            <button type="button" onclick="window.print()">Print Sheet</button>
+        </div>
+    </form>
+
+    <div class="action-group no-print" style="margin: 0 0 24px;">
+        <a class="button-link secondary-link" href="{{ url_for('items.item_qr_label', barcode=item['barcode']) }}">QR Only Label</a>
+        <a class="button-link secondary-link" href="{{ url_for('items.item_detail', barcode=item['barcode']) }}">Back to Item</a>
+        <a class="button-link secondary-link" href="{{ url_for('items.items') }}">Back to All Items</a>
+    </div>
+
+    <div class="label-sheet-grid" aria-label="Printable QR label sheet">
+        {% for _ in range(copies) %}
+        <div class="label-sheet-label">
+            <img
+                class="label-sheet-qr"
+                src="{{ url_for('items.item_qr_png', barcode=item['barcode']) }}"
+                alt="QR code for item code {{ item['barcode'] }}"
+            >
+            <p>{{ label_text }}</p>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}

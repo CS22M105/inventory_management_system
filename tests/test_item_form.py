@@ -73,6 +73,26 @@ def test_create_item_with_real_date(client, users, login):
     assert b"Vendor:" not in qr_only.data
     assert b"Exp:" not in qr_only.data
 
+    qr_download = client.get("/items/ITM-DATE/qr.png?download=1")
+    assert qr_download.status_code == 200
+    assert qr_download.mimetype == "image/png"
+    assert qr_download.data.startswith(b"\x89PNG")
+    assert "ITM-DATE-qr.png" in qr_download.headers["Content-Disposition"]
+
+    qr_label_png = client.get("/items/ITM-DATE/qr-label.png")
+    assert qr_label_png.status_code == 200
+    assert qr_label_png.mimetype == "image/png"
+    assert qr_label_png.data.startswith(b"\x89PNG")
+    assert "ITM-DATE-qr-label.png" in qr_label_png.headers["Content-Disposition"]
+
+    label_sheet = client.get(
+        "/items/ITM-DATE/label-sheet?copies=3&qr_size_mm=18&spacing_mm=2&label_text=Shelf-A"
+    )
+    assert label_sheet.status_code == 200
+    assert b"Print Multiple QR Labels" in label_sheet.data
+    assert label_sheet.data.count(b"class=\"label-sheet-label\"") == 3
+    assert b"Shelf-A" in label_sheet.data
+
 
 def test_create_item_without_date_is_null(client, users, login):
     _manager_login(login, users)
@@ -135,4 +155,5 @@ def test_sentinel_never_appears(client, users, login):
         pages += client.get(f"/items/{barcode}").data
         pages += client.get(f"/items/{barcode}/label").data
         pages += client.get(f"/items/{barcode}/qr-label").data
+        pages += client.get(f"/items/{barcode}/label-sheet").data
     assert b"00/00/0000" not in pages

@@ -45,6 +45,7 @@
                         {% if session.get("user_role") in ["faculty", "administrator"] %}
                         <a class="table-action-link" href="{{ url_for('items.item_label', barcode=item['barcode']) }}">Print Label</a>
                         <a class="table-action-link" href="{{ url_for('items.item_qr_label', barcode=item['barcode']) }}">QR Only</a>
+                        <a class="table-action-link" href="{{ url_for('items.item_label_sheet', barcode=item['barcode']) }}">Sheet</a>
                         <a class="table-action-link" href="{{ url_for('items.item_edit', item_id=item['id']) }}">Edit</a>
                         {% endif %}
                     </span>

@@ -835,6 +835,34 @@ footer {
     overflow-wrap: anywhere;
 }
 
+.label-sheet-grid {
+    align-items: start;
+    display: flex;
+    flex-wrap: wrap;
+}
+
+.label-sheet-label {
+    align-items: center;
+    background: white;
+    border: 1px dashed #cbd2d9;
+    box-sizing: border-box;
+    color: #111827;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    padding: 2mm;
+    text-align: center;
+}
+
+.label-sheet-label p {
+    font-size: 8px;
+    font-weight: 700;
+    line-height: 1.1;
+    margin: 1mm 0 0;
+    max-width: 24mm;
+    overflow-wrap: anywhere;
+}
+
 @media print {
     header,
     footer,
@@ -862,5 +890,11 @@ footer {
     .qr-label-compact {
         border: 0;
         width: 0.94in;
+    }
+
+    .label-sheet-label {
+        border: 0;
+        break-inside: avoid;
+        page-break-inside: avoid;
     }
 }

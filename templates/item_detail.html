@@ -75,6 +75,9 @@
         {% if session.get("user_role") in ["faculty", "administrator"] %}
         <a class="button-link" href="{{ url_for('items.item_label', barcode=item['barcode']) }}">Print Label</a>
         <a class="button-link" href="{{ url_for('items.item_qr_label', barcode=item['barcode']) }}">QR Only Label</a>
+        <a class="button-link" href="{{ url_for('items.item_label_sheet', barcode=item['barcode']) }}">Print Multiple QR Labels</a>
+        <a class="button-link secondary-link" href="{{ url_for('items.item_qr_png', barcode=item['barcode'], download=1) }}">Download QR PNG</a>
+        <a class="button-link secondary-link" href="{{ url_for('items.item_qr_label_png', barcode=item['barcode']) }}">Download QR + Label PNG</a>
         {% endif %}
         {% if session.get("user_role") in ["faculty", "administrator"] %}
         <a class="button-link" href="{{ url_for('items.item_edit', item_id=item['id']) }}">Edit Item</a>

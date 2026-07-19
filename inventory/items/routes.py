@@ -3,6 +3,7 @@
 import io
 
 from flask import Blueprint, Response, abort, redirect, render_template, request, url_for
+from PIL import Image, ImageDraw, ImageFont
 import psycopg2
 import qrcode
 
@@ -18,6 +19,63 @@ from inventory.core import (
 
 
 bp = Blueprint("items", __name__)
+
+
+def _stock_url(barcode):
+    base_url = APP_BASE_URL or request.host_url.rstrip("/")
+    return f"{base_url}/items/{barcode}/stock"
+
+
+def _make_qr_image(barcode, box_size=10, border=4):
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_M,
+        box_size=box_size,
+        border=border,
+    )
+    qr.add_data(_stock_url(barcode))
+    qr.make(fit=True)
+    return qr.make_image(fill_color="black", back_color="white").convert("RGB")
+
+
+def _png_response(image, filename=None):
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    headers = {}
+    if filename:
+        headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return Response(buffer.getvalue(), mimetype="image/png", headers=headers)
+
+
+def _bounded_int(value, default, minimum, maximum):
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, min(number, maximum))
+
+
+def _make_qr_label_image(item):
+    qr_image = _make_qr_image(item["barcode"], box_size=12, border=2)
+    qr_image = qr_image.resize((213, 213), Image.Resampling.NEAREST)
+
+    width = 288
+    height = 258
+    image = Image.new("RGB", (width, height), "white")
+    image.paste(qr_image, ((width - qr_image.width) // 2, 4))
+
+    draw = ImageDraw.Draw(image)
+    font = ImageFont.load_default()
+    label = item["barcode"]
+    text_box = draw.textbbox((0, 0), label, font=font)
+    text_width = text_box[2] - text_box[0]
+    draw.text(
+        ((width - text_width) // 2, 224),
+        label,
+        fill="black",
+        font=font,
+    )
+    return image
 
 
 @bp.route("/items")
@@ -109,23 +167,47 @@ def item_qr_png(barcode):
     if item is None:
         abort(404, description="Not recognized")
 
-    base_url = APP_BASE_URL or request.host_url.rstrip("/")
-    stock_url = f"{base_url}/items/{barcode}/stock"
+    filename = None
+    if request.args.get("download") == "1":
+        filename = f"{barcode}-qr.png"
 
-    qr = qrcode.QRCode(
-        version=1,
-        error_correction=qrcode.constants.ERROR_CORRECT_M,
-        box_size=10,
-        border=4,
+    return _png_response(_make_qr_image(barcode), filename=filename)
+
+
+@bp.route("/items/<barcode>/qr-label.png")
+def item_qr_label_png(barcode):
+    login_redirect = require_item_manager()
+
+    if login_redirect is not None:
+        return login_redirect
+
+    db = get_db()
+    item = db.execute(
+        """
+        SELECT id, barcode, name
+        FROM items
+        WHERE barcode = %s
+        """,
+        (barcode,),
+    ).fetchone()
+
+    if item is None:
+        abort(404, description="Not recognized")
+
+    log_audit_event(
+        db,
+        "qr_label_viewed",
+        target_type="item",
+        target_id=item["id"],
+        target_label=f"{item['name']} ({item['barcode']})",
+        details={"barcode": item["barcode"], "format": "png_download"},
     )
-    qr.add_data(stock_url)
-    qr.make(fit=True)
-    image = qr.make_image(fill_color="black", back_color="white")
+    db.commit()
 
-    buffer = io.BytesIO()
-    image.save(buffer, format="PNG")
-
-    return Response(buffer.getvalue(), mimetype="image/png")
+    return _png_response(
+        _make_qr_label_image(item),
+        filename=f"{barcode}-qr-label.png",
+    )
 
 
 @bp.route("/items/<barcode>/label")
@@ -192,6 +274,57 @@ def item_qr_label(barcode):
     db.commit()
 
     return render_template("item_qr_label.html", item=item)
+
+
+@bp.route("/items/<barcode>/label-sheet")
+def item_label_sheet(barcode):
+    login_redirect = require_item_manager()
+
+    if login_redirect is not None:
+        return login_redirect
+
+    db = get_db()
+    item = db.execute(
+        """
+        SELECT id, barcode, name
+        FROM items
+        WHERE barcode = %s
+        """,
+        (barcode,),
+    ).fetchone()
+
+    if item is None:
+        abort(404, description="Not recognized")
+
+    copies = _bounded_int(request.args.get("copies"), 20, 1, 100)
+    qr_size_mm = _bounded_int(request.args.get("qr_size_mm"), 18, 10, 40)
+    spacing_mm = _bounded_int(request.args.get("spacing_mm"), 3, 0, 20)
+    label_text = request.args.get("label_text", item["barcode"]).strip()
+    if not label_text:
+        label_text = item["barcode"]
+
+    log_audit_event(
+        db,
+        "qr_label_viewed",
+        target_type="item",
+        target_id=item["id"],
+        target_label=f"{item['name']} ({item['barcode']})",
+        details={
+            "barcode": item["barcode"],
+            "format": "label_sheet",
+            "copies": copies,
+        },
+    )
+    db.commit()
+
+    return render_template(
+        "item_label_sheet.html",
+        item=item,
+        copies=copies,
+        qr_size_mm=qr_size_mm,
+        spacing_mm=spacing_mm,
+        label_text=label_text,
+    )
 
 
 @bp.route("/items/new", methods=["GET", "POST"])

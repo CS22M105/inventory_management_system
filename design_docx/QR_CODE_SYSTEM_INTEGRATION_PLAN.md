@@ -1719,3 +1719,98 @@ CSV exports include the transaction
 ```
 
 This approach connects the physical university inventory item to the software record while keeping the database as the source of truth.
+
+---
+
+## Update: July 18, 2026 - QR Download and Multi-Label Printing
+
+This update adds practical QR-code output options for users who need to work
+with Brother P-touch Editor, Word, Pages, Google Docs, or browser-based printing.
+
+### What Was Added
+
+```text
+1. Download raw QR PNG
+   Route:
+       /items/<barcode>/qr.png?download=1
+
+   Purpose:
+       Downloads only the QR image. This is useful when users want to paste the
+       QR into P-touch Editor, Word, Pages, Google Docs, or another label tool.
+
+2. Download QR + label PNG
+   Route:
+       /items/<barcode>/qr-label.png
+
+   Purpose:
+       Generates a single PNG image containing:
+           - QR code
+           - item barcode/internal code below it
+
+       This avoids A4/browser print layout problems and gives users a simple
+       image they can paste into label software.
+
+3. Print Multiple QR Labels page
+   Route:
+       /items/<barcode>/label-sheet
+
+   Purpose:
+       Lets users choose:
+           - number of copies,
+           - QR size in millimeters,
+           - spacing in millimeters,
+           - label text.
+
+       The page renders repeated QR labels and can be printed from the browser
+       or saved as PDF.
+```
+
+### UI Entry Points
+
+```text
+Item Detail:
+    - Download QR PNG
+    - Download QR + Label PNG
+    - Print Multiple QR Labels
+
+Full Label Page:
+    - Download QR PNG
+    - Download QR + Label PNG
+    - Print Multiple QR Labels
+
+QR Only Label Page:
+    - Download QR PNG
+    - Download QR + Label PNG
+    - Print Multiple QR Labels
+
+All Items table:
+    - Sheet
+```
+
+### Why
+
+Browser printing can default to A4/PDF-style page layout and may not expose all
+label-printer sizing options. Downloadable PNGs give users a reliable manual
+path for P-touch Editor or document editors, while the label-sheet page supports
+printing multiple copies at once.
+
+### Safety / Permissions
+
+```text
+- These routes require the same faculty/administrator item-manager access as
+  existing QR label routes.
+- The QR code still points to the app's item stock page.
+- The database remains the source of truth.
+- No external QR-code service is used.
+```
+
+### Verification
+
+```text
+Tests verify:
+    - raw QR PNG download returns PNG with a download filename,
+    - QR + label PNG returns PNG with a download filename,
+    - multiple-label sheet renders the requested copy count,
+    - faculty can access the new QR output routes,
+    - the old 00/00/0000 expiration sentinel does not appear.
+```
