@@ -2,98 +2,16 @@
 
 ## Recommended Reading Sequence
 
-Read the project documents in this order to build understanding from the current
-system requirements to operations and deployment:
-
-1. `design_docx/SOFTWARE_REQUIREMENTS_SPECIFICATION.md` — The consolidated
-   requirements, architecture, workflows, and system diagrams.
-2. `README.md` — How to install, initialize the database, run tests, configure
-   production, and start the app.
-3. `PROGRESS_REPORT.md` — What has actually been built so far and current status.
-4. `design_docx/PROJECT_DOCUMENTATION.md` — Beginner-friendly implementation
-   notes and project explanation.
-5. `QR_CODE_SYSTEM_INTEGRATION_PLAN.md` — QR code labels and camera-based
-   scanning plan/status.
-6. `SECURITY_AND_AUTH_PLAN.md` — Authentication and security-hardening plan.
-7. `DATA_MIGRATIONS_RELIABILITY_PLAN.md` — Database migrations, reliability,
-   backups, and restore planning.
-8. `DEPLOYMENT_INFRASTRUCTURE_PLAN.md` — Hosting, managed PostgreSQL, TLS, and
-   deployment plan.
-9. `QUALITY_OPERATIONS_PLAN.md` — Testing, observability, health checks, and
-   maintainability plan.
-10. `UNIVERSITY_MARKET_READINESS_PLAN.md` — University/product readiness plan.
-
-## Summary
-
-Create a small Flask + PostgreSQL web app skeleton inside `inventory/
-
-The skeleton will be runnable locally and will include placeholder screens for login, dashboard, item management, barcode entry, transaction history, and reports/export.
-
-## Implementation Changes
-
-- Add core project files:
-  - `inventory/requirements.txt`
-  - `inventory/README.md`
-  - `inventory/app.py`
-  - `inventory/schema.sql`
-  - `inventory/.gitignore`
-
-- Add frontend structure:
-  - `inventory/templates/base.html`
-  - `inventory/templates/login.html`
-  - `inventory/templates/dashboard.html`
-  - `inventory/templates/items.html`
-  - `inventory/templates/item_new.html`
-  - `inventory/templates/scan.html`
-  - `inventory/templates/transactions.html`
-  - `inventory/static/css/styles.css`
-
-- Configure the database connection:
-  - The app reads a PostgreSQL connection string from the `DATABASE_URL` environment variable.
-  - Tables are created by running the `init-db` command, which executes `schema.sql`.
-
-## Initial App Behavior
-
-- Use Flask with PostgreSQL.
-- Add routes:
-  - `/` redirects to `/login` or `/dashboard`.
-  - `/login` accepts an institutional ID.
-  - `/logout` clears the session.
-  - `/dashboard` shows inventory summary placeholders.
-  - `/items` lists inventory items.
-  - `/items/new` provides the add-item form.
-  - `/scan` provides a barcode input form for future scanner workflow.
-  - `/transactions` lists transaction history.
-  - `/reports/export` is a placeholder route for future CSV export.
-
-- Add PostgreSQL tables:
-  - `users`
-  - `items`
-  - `transactions`
-
-- Seed a few demo users in `schema.sql`:
-  - Student user.
-  - Faculty/staff user.
-  - Administrator user.
-
-## Test Plan
-
-- Install dependencies with `pip install -r requirements.txt`.
-- Initialize the database with `flask --app app init-db`.
-- Start the app with `flask --app app run --debug`.
-- Verify:
-  - Login page opens.
-  - Demo user ID can log in.
-  - Dashboard loads after login.
-  - Items page opens.
-  - New item form opens.
-  - Scan page opens and accepts barcode text.
-  - Transactions page opens.
-  - Logout returns user to login.
-
-## Assumptions
-
-- Flask is the preferred framework for the first skeleton because it is simple, local-friendly, and fast to prototype.
-- Barcode scanner input will initially be handled as plain text input.
-- The first skeleton will focus on structure and navigation, not complete inventory logic.
-- Styling will be simple and professional, suitable for a nursing education tool.
+1. [QR Code System Integration Plan (Phase 3)](#section-qr-code-system-integration-plan-phase-3) — June 30, 2026 — `design_docx/QR_CODE_SYSTEM_INTEGRATION_PLAN.md`
+2. [Security & Authentication Integration Plan (Phase 1)](#section-security-authentication-integration-plan-phase-1) — July 4, 2026 — `design_docx/SECURITY_AND_AUTH_PLAN.md`
+3. [Data, Migrations & Reliability Plan](#section-data-migrations-reliability-plan) — July 8, 2026 — `design_docx/DATA_MIGRATIONS_RELIABILITY_PLAN.md`
+4. [Deployment & Infrastructure Plan](#section-deployment-infrastructure-plan) — July 8, 2026 — `design_docx/DEPLOYMENT_INFRASTRUCTURE_PLAN.md`
+5. [Quality & Operations Plan (Phase 4)](#section-quality-operations-plan-phase-4) — July 9, 2026 — `design_docx/QUALITY_OPERATIONS_PLAN.md`
+6. [Accessibility Test Checklist](#section-accessibility-test-checklist) — July 10, 2026 — `design_docx/ACCESSIBILITY_TEST_CHECKLIST.md`
+7. [University Market Readiness Plan](#section-university-market-readiness-plan) — July 10, 2026 — `design_docx/UNIVERSITY_MARKET_READINESS_PLAN.md`
+8. [Accessibility Statement](#section-accessibility-statement) — July 10, 2026 — `ACCESSIBILITY_STATEMENT.md`
+9. [Privacy and Data Handling](#section-privacy-and-data-handling) — July 12, 2026 — `PRIVACY_AND_DATA_HANDLING.md`
+10. [Admin Training Note](#section-admin-training-note) — July 12, 2026 — `ADMIN_NOTES_TRAINING.md`
+11. [CSV Export Policy](#section-csv-export-policy) — July 12, 2026 — `CSV_EXPORT_POLICY.md`
+12. [Data Retention Policy](#section-data-retention-policy) — July 12, 2026 — `DATA_RETENTION_POLICY.md`
+13. Progress_report.md file consists of all day to day progress.
