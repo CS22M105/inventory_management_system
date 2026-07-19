@@ -837,8 +837,8 @@ footer {
 
 .label-sheet-grid {
     align-items: start;
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    justify-content: start;
 }
 
 .label-sheet-label {

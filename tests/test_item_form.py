@@ -91,6 +91,7 @@ def test_create_item_with_real_date(client, users, login):
     assert label_sheet.status_code == 200
     assert b"Print Multiple QR Labels" in label_sheet.data
     assert label_sheet.data.count(b"class=\"label-sheet-label\"") == 3
+    assert b"grid-template-columns: repeat(auto-fill, 22mm)" in label_sheet.data
     assert b"Shelf-A" in label_sheet.data
 
 

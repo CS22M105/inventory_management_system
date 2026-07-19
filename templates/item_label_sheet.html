@@ -5,12 +5,33 @@
 {% block extra_css %}
 <style>
     .label-sheet-grid {
+        display: grid;
         gap: {{ spacing_mm }}mm;
+        grid-template-columns: repeat(auto-fill, {{ qr_size_mm + 4 }}mm);
+        justify-content: start;
     }
 
     .label-sheet-qr {
         height: {{ qr_size_mm }}mm;
         width: {{ qr_size_mm }}mm;
+    }
+
+    .label-sheet-label {
+        width: {{ qr_size_mm + 4 }}mm;
+    }
+
+    @media print {
+        @page {
+            size: A4 portrait;
+            margin: 8mm;
+        }
+
+        .label-sheet-grid {
+            display: grid;
+            grid-auto-flow: row;
+            grid-template-columns: repeat(auto-fill, {{ qr_size_mm + 4 }}mm);
+            justify-content: start;
+        }
     }
 </style>
 {% endblock %}
