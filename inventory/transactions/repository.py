@@ -86,7 +86,14 @@ def get_transaction_rows(db, filters, limit=None, offset=None):
 
 def get_transaction_filter_options(db):
     items = db.execute("SELECT id, name, barcode FROM items ORDER BY name, barcode").fetchall()
-    users = db.execute("SELECT id, name, institution_id FROM users ORDER BY name, institution_id").fetchall()
+    users = db.execute(
+        """
+        SELECT id, name, institution_id
+        FROM users
+        WHERE role <> 'administrator'
+        ORDER BY name, institution_id
+        """
+    ).fetchall()
     lab_instructors = db.execute(
         """
         SELECT DISTINCT lab_instructor
