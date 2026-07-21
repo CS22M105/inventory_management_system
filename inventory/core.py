@@ -6,6 +6,7 @@ import time
 
 from flask import (
     Flask,
+    flash,
     g,
     got_request_exception,
     has_request_context,
@@ -148,6 +149,36 @@ register_request_logging(app)
 got_request_exception.connect(log_unhandled_exception, app)
 app.teardown_appcontext(close_db)
 register_cli(app)
+
+
+def mark_session_activity(now=None):
+    session["last_activity_at"] = int(now or time.time())
+
+
+@app.before_request
+def enforce_session_idle_timeout():
+    if request.endpoint == "static" or request.path.startswith("/static/"):
+        return None
+    if "user_id" not in session:
+        return None
+
+    now = int(time.time())
+    last_activity_at = session.get("last_activity_at")
+    if last_activity_at is not None:
+        try:
+            idle_seconds = now - int(last_activity_at)
+        except (TypeError, ValueError):
+            idle_seconds = 0
+        if idle_seconds > SESSION_IDLE_MINUTES * 60:
+            session.clear()
+            flash(
+                "You were logged out after a period of inactivity. Please log in again.",
+                "warning",
+            )
+            return redirect(url_for("auth.login"))
+
+    mark_session_activity(now)
+    return None
 
 
 @app.after_request

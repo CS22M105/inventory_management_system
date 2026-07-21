@@ -54,30 +54,6 @@ QR-only labels, camera scanning, role separation, audit logs, export controls,
 privacy/accessibility documentation, production configuration, and Render
 deployment preparation.
 
-Legacy source documents consolidated into this SRS and removed from the active
-documentation set to reduce redundancy:
-
-```text
-1. Legacy source: design_docx/planning_and_proposal.md
-   Original heading: Proposal: QR-Code-Based Inventory Management System for
-   Nursing Education and Healthcare Settings
-   Original document date: not explicitly stated in the file
-   Original schedule dates preserved in Section 16
-
-2. Legacy source: design_docx/HIGH_LEVEL_DESIGN.md
-   Original heading: High-Level Design: Katz Nursing School Inventory Management
-   System
-   Original date: July 15, 2026
-
-3. Legacy source: ARCHITECTURE.md
-   Original heading: Architecture Plan
-   Original date: July 10, 2026
-
-4. Legacy source: design_docx/SYSTEM_DIAGRAMS.md
-   Original heading: System Diagrams: Nursing Inventory Management System
-   Original document date: not explicitly stated in the file
-```
-
 Revision/source history:
 
 | Date | Source/phase | Preserved purpose |
@@ -86,10 +62,6 @@ Revision/source history:
 | June 17 - June 23, 2026 | Prototype setup phase | Application setup, database, login, inventory table |
 | June 24 - July 1, 2026 | QR/inventory workflow phase | QR route, item detail, printable labels, stock page |
 | July 2 - July 8, 2026 | Reports/dashboard phase | Low stock, recent activity, exports |
-| July 10, 2026 | Legacy `ARCHITECTURE.md` | Package layout, service extraction, blueprint refactor plan/status |
-| July 15, 2026 | Legacy `HIGH_LEVEL_DESIGN.md` | Current high-level design snapshot |
-| July 18, 2026 | This SRS | Consolidated and updated SRS |
-
 ---
 
 ## 2. Purpose

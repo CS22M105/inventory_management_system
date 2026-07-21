@@ -14,6 +14,7 @@ from inventory.core import (
     is_locked_out,
     limiter,
     mark_sudo,
+    mark_session_activity,
     read_token,
     record_failed_login,
     remaining_login_attempts,
@@ -76,6 +77,7 @@ def login():
         session["user_name"] = user["name"]
         session["user_role"] = user["role"]
         session["email"] = user["email"]
+        mark_session_activity()
         mark_sudo()
 
         return redirect(url_for("dashboard.dashboard"))

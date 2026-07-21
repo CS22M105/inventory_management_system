@@ -272,6 +272,20 @@ def test_login_marks_session_permanent_and_sudo(client, users, login):
     with client.session_transaction() as sess:
         assert sess.permanent is True
         assert "sudo_at" in sess
+        assert "last_activity_at" in sess
+
+
+def test_inactive_session_redirects_to_login_and_clears_session(client, users, login):
+    login(users["faculty"]["email"], users["faculty"]["password"])
+    with client.session_transaction() as sess:
+        sess["last_activity_at"] = 0
+
+    resp = client.get("/items")
+
+    assert resp.status_code == 302
+    assert "/login" in _location(resp)
+    with client.session_transaction() as sess:
+        assert "user_id" not in sess
 
 
 # ---------------------------------------------------------------------------
