@@ -50,7 +50,7 @@
                 <option value="">All users</option>
                 {% for user in users %}
                 <option value="{{ user['id'] }}" {% if filters.get('user_id') == user['id']|string %}selected{% endif %}>
-                    {{ user["name"] }} ({{ user["institution_id"] }})
+                    {{ user["name"] }}
                 </option>
                 {% endfor %}
             </select>
